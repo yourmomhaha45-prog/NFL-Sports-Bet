@@ -92,20 +92,60 @@ st.sidebar.header("⚙️ Settings")
 ev_filter = st.sidebar.slider("Minimum EV ($)", -50.0, 100.0, 0.0,5.0)
 bet_amount = st.sidebar.number_input("Bet Amount per Game ($)", value=DEFAULT_BET, step=10)
 
-# --- MODERN DARK CSS ---
+# --- MODERN DARK CSS WITH GRADIENTS & BLURRED SIDEBAR ---
 st.markdown("""
 <style>
-body { background-color: #12121a; color: #e0e0e0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin:0; padding:0; }
-h1,h2,h3 { color:#b67aff; margin-bottom:0.5rem; }
-.card { background:#1f1f2a; border-radius:12px; padding:18px 24px; margin:12px 0; box-shadow:0 2px 8px rgba(0,0,0,0.5); transition: transform 0.2s ease, box-shadow 0.2s ease; }
-.card:hover { transform: translateY(-4px); box-shadow:0 6px 20px rgba(0,0,0,0.7); }
-.glow-badge { background: linear-gradient(135deg,#7f5af0,#b67aff); color:white; padding:4px 10px; border-radius:8px; font-size:0.85rem; text-transform:uppercase; box-shadow:0 0 12px rgba(182,122,255,0.6),0 0 24px rgba(127,90,240,0.4); animation:glow 1.8s infinite alternate; }
-@keyframes glow { from { box-shadow:0 0 6px rgba(182,122,255,0.4),0 0 18px rgba(127,90,240,0.2); } to { box-shadow:0 0 18px rgba(182,122,255,0.8),0 0 36px rgba(127,90,240,0.6); } }
+body {
+    background: linear-gradient(135deg,#1b1b2f,#12121a);
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin:0; padding:0;
+}
+h1,h2,h3 { 
+    color:#b67aff; 
+    margin-bottom:0.5rem; 
+    letter-spacing:0.5px;
+    text-shadow: 0 0 8px rgba(182,122,255,0.5);
+}
+.css-1d391kg {
+    background: rgba(28,28,40,0.9);
+    backdrop-filter: blur(8px);
+    border-radius: 16px;
+    padding: 20px;
+}
+.card {
+    background: linear-gradient(145deg,#1f1f2a,#212130);
+    border-radius: 16px;
+    padding: 20px;
+    margin: 12px 0;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 8px 32px rgba(127,90,240,0.6);
+}
+.glow-badge {
+    background: linear-gradient(135deg,#7f5af0,#b67aff);
+    color:white;
+    padding:4px 10px;
+    border-radius:10px;
+    font-size:0.85rem;
+    text-transform:uppercase;
+    box-shadow:0 0 12px rgba(182,122,255,0.6),0 0 24px rgba(127,90,240,0.4);
+    animation:glow 1.8s infinite alternate;
+}
+@keyframes glow {
+    from { box-shadow:0 0 6px rgba(182,122,255,0.4),0 0 18px rgba(127,90,240,0.2); }
+    to { box-shadow:0 0 18px rgba(182,122,255,0.8),0 0 36px rgba(127,90,240,0.6); }
+}
+.card h4 { margin:0; font-weight:600; font-size:1.1rem; }
+.card p { margin:4px 0; font-size:0.9rem; color:#ccc; }
 </style>
 """, unsafe_allow_html=True)
 
 # --- HEADER ---
-st.markdown("<h1 style='text-align:center;'>🏈 NFL +EV Bot – Modern Edition</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;'>🏈 NFL +EV Bot – Cinematic Modern</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center; opacity:0.8;'>Weekly EV, Moneyline, Spread & Totals bets</p>", unsafe_allow_html=True)
 
 # --- DATA ---
