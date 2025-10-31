@@ -2,13 +2,13 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
-import time
+import plotly.graph_objects as go
 
 # -------------------------------
 # PAGE CONFIG
 # -------------------------------
 st.set_page_config(
-    page_title="NFL +EV Dashboard",
+    page_title="",  # no title
     page_icon="🏈",
     layout="wide"
 )
@@ -35,13 +35,13 @@ def get_moneyline_ev(ml, bet=100):
 # -------------------------------
 # FETCH DATA FUNCTION
 # -------------------------------
-@st.cache_data(ttl=60)  # Refresh every 60 seconds
+@st.cache_data(ttl=60)
 def fetch_games():
     url = f"https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey={API_KEY}&regions=us&markets=moneyline,spreads"
     try:
         response = requests.get(url)
         if response.status_code == 422:
-            return pd.DataFrame()  # No odds available
+            return pd.DataFrame()
         response.raise_for_status()
         data = response.json()
         results = []
@@ -54,7 +54,6 @@ def fetch_games():
                 week = dt.isocalendar()[1]
 
                 home_ev = away_ev = None
-                # Loop through bookmakers to find first available market
                 for bookmaker in g.get('bookmakers', []):
                     for market in bookmaker.get('markets', []):
                         outcomes = market.get('outcomes', [])
@@ -81,7 +80,6 @@ def fetch_games():
                 continue
 
         return pd.DataFrame(results)
-
     except Exception as e:
         st.error(f"Error fetching odds: {e}")
         return pd.DataFrame()
@@ -95,6 +93,25 @@ def placeholder_games():
         {"Week": 1, "Date": "Sep 10, 2025 04:25 PM", "Home Team": "Cowboys", "Away Team": "Giants", "Home EV": -5, "Away EV": 15},
         {"Week": 1, "Date": "Sep 11, 2025 01:00 PM", "Home Team": "Packers", "Away Team": "Bears", "Home EV": 10, "Away EV": 5},
     ])
+
+# -------------------------------
+# SPARKLINE FUNCTION
+# -------------------------------
+def ev_sparkline(ev_history, color="#06d6a0"):
+    fig = go.Figure(go.Scatter(
+        y=ev_history,
+        mode='lines',
+        line=dict(color=color, width=2),
+        fill='tozeroy'
+    ))
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=40,
+        width=200,
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False)
+    )
+    return fig
 
 # -------------------------------
 # STYLES FOR GLASSY CARDS
@@ -129,15 +146,11 @@ body {background: #0e1117; color: #f0f0f0; font-family: 'Helvetica', sans-serif;
 st.sidebar.header("Filters")
 refresh_button = st.sidebar.button("Refresh Odds Now")
 
-# Fetch real games
 df = fetch_games()
-
-# If no real odds, show placeholders
 if df.empty:
     st.info("No odds available yet. Showing placeholder games.")
     df = placeholder_games()
 
-# Sidebar filters
 week_filter = st.sidebar.multiselect("Select Week", sorted(df["Week"].unique()), default=sorted(df["Week"].unique()))
 team_filter = st.sidebar.multiselect("Select Teams", sorted(set(df["Home Team"].unique()) | set(df["Away Team"].unique())))
 sort_option = st.sidebar.radio("Sort by", ["Highest EV", "Home EV", "Away EV", "Week", "Date"])
@@ -161,18 +174,29 @@ elif sort_option == "Week":
 elif sort_option == "Date":
     filtered_df = filtered_df.sort_values(by="Date")
 
-# Display glassy cards
+# Display glassy cards with sparklines
 for idx, row in filtered_df.iterrows():
+    # Fake EV history for placeholder or real EV
+    home_history = [row['Home EV'] - 5, row['Home EV'] - 2, row['Home EV']]
+    away_history = [row['Away EV'] - 5, row['Away EV'] - 2, row['Away EV']]
+
     st.markdown(f"""
     <div class="game-card">
         <div class="game-date">{row['Date']} | Week {row['Week']}</div>
         <div class="team">{row['Away Team']} <span class="{'ev-positive' if row['Away EV']>0 else 'ev-negative'}">${row['Away EV']}</span></div>
         <div style="background: {'#06d6a0' if row['Away EV']>0 else '#ef476f'}; width: {min(abs(row['Away EV']),100)}%;"
              class="ev-bar"></div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.plotly_chart(ev_sparkline(away_history, color="#ef476f" if row['Away EV']<0 else "#06d6a0"), use_container_width=False)
+
+    st.markdown(f"""
+    <div class="game-card">
         <div class="team">{row['Home Team']} <span class="{'ev-positive' if row['Home EV']>0 else 'ev-negative'}">${row['Home EV']}</span></div>
         <div style="background: {'#06d6a0' if row['Home EV']>0 else '#ef476f'}; width: {min(abs(row['Home EV']),100)}%;"
              class="ev-bar"></div>
     </div>
     """, unsafe_allow_html=True)
+    st.plotly_chart(ev_sparkline(home_history, color="#ef476f" if row['Home EV']<0 else "#06d6a0"), use_container_width=False)
 
 st.caption("Data provided by [The Odds API](https://the-odds-api.com). Built with ❤️ using Streamlit.")
