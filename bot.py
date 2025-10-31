@@ -7,7 +7,7 @@ from datetime import datetime
 SPORT = "americanfootball_nfl"
 REGION = "us"
 DEFAULT_BET = 100
-ODDS_API_KEY = st.secrets["ODDS_API_KEY"]
+ODDS_API_KEY = "558d1e3bfadf5243c8292da72801012f"  # Direct in code for local testing
 
 # --- FUNCTIONS ---
 def moneyline_to_multiplier(ml):
@@ -92,7 +92,7 @@ st.sidebar.header("⚙️ Settings")
 ev_filter = st.sidebar.slider("Minimum EV ($)", -50.0, 100.0, 0.0,5.0)
 bet_amount = st.sidebar.number_input("Bet Amount per Game ($)", value=DEFAULT_BET, step=10)
 
-# --- MODERN TEXTURED BACKGROUND CSS ---
+# --- MODERN DARK BACKGROUND + CARDS + SIDEBAR + FADE CSS ---
 st.markdown("""
 <style>
 body {
@@ -100,59 +100,28 @@ body {
     color: #e0e0e0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin:0; padding:0;
-    
-    /* Textured background */
-    background-image: 
-        linear-gradient(135deg,#1b1b2f,#12121a),
-        url('https://www.transparenttextures.com/patterns/asfalt-dark.png');
+    background-image: linear-gradient(135deg,#1b1b2f,#12121a),
+                      url('https://www.transparenttextures.com/patterns/asfalt-dark.png');
     background-repeat: repeat;
     background-size: auto;
 }
-
-h1,h2,h3 { 
-    color:#b67aff; 
-    margin-bottom:0.5rem; 
-    letter-spacing:0.5px;
-    text-shadow: 0 0 8px rgba(182,122,255,0.5);
-}
-
-.css-1d391kg {
-    background: rgba(28,28,40,0.9);
-    backdrop-filter: blur(8px);
-    border-radius: 16px;
-    padding: 20px;
-}
-
-.card {
-    background: linear-gradient(145deg,#1f1f2a,#212130);
-    border-radius: 16px;
-    padding: 20px;
-    margin: 12px 0;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.6);
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
-}
-.card:hover {
-    transform: translateY(-6px) scale(1.02);
-    box-shadow: 0 8px 32px rgba(127,90,240,0.6);
-}
-
-.glow-badge {
-    background: linear-gradient(135deg,#7f5af0,#b67aff);
-    color:white;
-    padding:4px 10px;
-    border-radius:10px;
-    font-size:0.85rem;
-    text-transform:uppercase;
-    box-shadow:0 0 12px rgba(182,122,255,0.6),0 0 24px rgba(127,90,240,0.4);
-    animation:glow 1.8s infinite alternate;
-}
-@keyframes glow {
-    from { box-shadow:0 0 6px rgba(182,122,255,0.4),0 0 18px rgba(127,90,240,0.2); }
-    to { box-shadow:0 0 18px rgba(182,122,255,0.8),0 0 36px rgba(127,90,240,0.6); }
-}
-
-.card h4 { margin:0; font-weight:600; font-size:1.1rem; }
-.card p { margin:4px 0; font-size:0.9rem; color:#ccc; }
+h1,h2,h3 { color:#b67aff; margin-bottom:0.5rem; letter-spacing:0.5px; text-shadow: 0 0 8px rgba(182,122,255,0.5); }
+.card { background: linear-gradient(145deg,#1f1f2a,#212130); border-radius:16px; padding:20px; margin:12px 0; box-shadow:0 4px 16px rgba(0,0,0,0.6); transition: transform 0.3s ease, box-shadow 0.3s ease; position:relative; overflow:hidden; }
+.card::before { content:""; position:absolute; top:-50%; left:-50%; width:200%; height:200%; background:linear-gradient(45deg, rgba(127,90,240,0.15), rgba(182,122,255,0.15)); opacity:0; transition: opacity 0.5s ease; z-index:0; }
+.card:hover { transform: translateY(-6px) scale(1.02); box-shadow:0 8px 32px rgba(127,90,240,0.6); }
+.card:hover::before { opacity:1; }
+.card * { position:relative; z-index:1; }
+.glow-badge { background: linear-gradient(135deg,#7f5af0,#b67aff); color:white; padding:4px 10px; border-radius:10px; font-size:0.85rem; text-transform:uppercase; box-shadow:0 0 12px rgba(182,122,255,0.6),0 0 24px rgba(127,90,240,0.4); animation:glow 1.8s infinite alternate; }
+@keyframes glow { from { box-shadow:0 0 6px rgba(182,122,255,0.4),0 0 18px rgba(127,90,240,0.2); } to { box-shadow:0 0 18px rgba(182,122,255,0.8),0 0 36px rgba(127,90,240,0.6); } }
+.card h4 { margin:0; font-weight:600; font-size:1.1rem; } .card p { margin:4px 0; font-size:0.9rem; color:#ccc; }
+[data-testid="stSidebar"] > div:first-child { background: linear-gradient(145deg,#1f1f2a,#212130); backdrop-filter: blur(8px); border-radius:16px; padding:20px; box-shadow:0 4px 16px rgba(0,0,0,0.6); color:#e0e0e0; }
+.stSidebar h2, .stSidebar h3, .stSidebar h4 { color: #b67aff; text-shadow: 0 0 6px rgba(182,122,255,0.5); }
+.stSlider, .stNumberInput>div { background: linear-gradient(145deg,#1f1f2a,#212130); border-radius: 12px; color:#e0e0e0; }
+.fade-in { opacity:0; transform: translateY(10px); animation: fadeInUp 0.6s forwards; }
+@keyframes fadeInUp { to { opacity:1; transform:translateY(0); } }
+details summary { cursor:pointer; font-weight:600; color:#b67aff; text-shadow: 0 0 8px rgba(182,122,255,0.5); font-size:1.1rem; }
+details { border-radius:16px; padding:16px; margin:8px 0; background: linear-gradient(145deg,#1f1f2a,#212130); box-shadow:0 4px 16px rgba(0,0,0,0.6); }
+details p { margin:4px 0; color:#ccc; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -171,7 +140,7 @@ games_df = calculate_best_bet(games_df)
 games_df = games_df[games_df["Best EV ($)"]>=ev_filter]
 weeks = sorted(games_df["Week"].unique())
 
-# --- WEEK & MARKET TABS ---
+# --- WEEK & MARKET TABS WITH CARDS/EXPANDERS ---
 week_tabs = st.tabs([f"Week {w}" for w in weeks])
 for i, week in enumerate(weeks):
     with week_tabs[i]:
@@ -185,17 +154,21 @@ for i, week in enumerate(weeks):
                 num_bets = market_df.shape[0]
                 st.markdown(f"<p style='text-align:center; font-weight:600;'>Simulated Bets: {num_bets} | Total Expected Profit: ${total_ev}</p>", unsafe_allow_html=True)
 
-                # --- CARD GRID ---
+                # --- CARD GRID WITH CLICKABLE EXPANDERS ---
                 cols = st.columns(3)
                 c_idx = 0
                 for idx, game in market_df.iterrows():
                     with cols[c_idx]:
                         st.markdown(f"""
-                        <div class="card">
-                            <h4>{game['Away Team']} @ {game['Home Team']}</h4>
-                            <p style="font-size:0.9rem; opacity:0.75;">{game['Date'].strftime("%b %d, %I:%M %p")}</p>
-                            <p><span class="glow-badge">Best Bet: {game['Best Bet']}</span></p>
-                            <p style="margin-top:8px;">EV: <strong>${game['Best EV ($)']}</strong></p>
+                        <div class="fade-in">
+                            <details>
+                                <summary>{game['Away Team']} @ {game['Home Team']} - Best Bet: {game['Best Bet']}</summary>
+                                <p>Date: {game['Date'].strftime("%b %d, %I:%M %p")}</p>
+                                <p>Market: {game['Market']}</p>
+                                <p>Home EV ($): {game['Home EV ($)']}</p>
+                                <p>Away EV ($): {game['Away EV ($)']}</p>
+                                <p>Best EV ($): {game['Best EV ($)']}</p>
+                            </details>
                         </div>
                         """, unsafe_allow_html=True)
                     c_idx = (c_idx + 1) % 3
