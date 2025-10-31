@@ -41,8 +41,12 @@ def fetch_games():
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
-        results = []
 
+        if not data:
+            st.warning("⚠️ API returned no games. NFL may be off-season or no games scheduled.")
+            return pd.DataFrame()
+
+        results = []
         for g in data:
             try:
                 home = g['home_team']
@@ -65,10 +69,20 @@ def fetch_games():
                         "Home EV": home_ev,
                         "Away EV": away_ev
                     })
-            except:
+            except Exception as e:
+                st.error(f"Error parsing game data: {e}")
                 continue
+
+        if not results:
+            st.warning("⚠️ No valid game odds available yet.")
+            return pd.DataFrame()
+
         return pd.DataFrame(results).sort_values(by=["Week", "Date"])
-    except:
+    except requests.exceptions.HTTPError as e:
+        st.error(f"HTTP Error: {e}")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Unexpected Error: {e}")
         return pd.DataFrame()
 
 # -------------------------------
@@ -106,7 +120,7 @@ st.markdown("Interactive glassy cards showing Home vs Away EV with mini native b
 
 df = fetch_games()
 if df.empty:
-    st.error("No data available. Check your API key or wait for odds updates.")
+    st.info("No games to display yet. Check back when NFL games are scheduled or API limits reset.")
 else:
     # Sidebar filters
     st.sidebar.header("Filters")
