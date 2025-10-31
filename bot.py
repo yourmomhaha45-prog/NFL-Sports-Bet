@@ -2,15 +2,15 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
+import plotly.graph_objects as go
 
 # -------------------------------
 # PAGE CONFIG
 # -------------------------------
 st.set_page_config(
-    page_title="NFL EV Dashboard",
+    page_title="NFL +EV Dashboard",
     page_icon="🏈",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 API_KEY = "558d1e3bfadf5243c8292da72801012f"
@@ -24,21 +24,20 @@ def moneyline_to_prob(ml):
 def moneyline_to_multiplier(ml):
     return ml / 100 + 1 if ml > 0 else 100 / abs(ml) + 1
 
-def calculate_ev(prob, payout, bet):
-    return prob * payout - (1 - prob) * bet
+def calculate_ev(prob, payout, bet=100):
+    return round(prob * payout - (1 - prob) * bet, 2)
 
-def get_moneyline_ev(odds, bet=100):
-    prob = moneyline_to_prob(odds)
-    payout = (moneyline_to_multiplier(odds) - 1) * bet
-    return round(calculate_ev(prob, payout, bet), 2)
+def get_moneyline_ev(ml, bet=100):
+    prob = moneyline_to_prob(ml)
+    payout = (moneyline_to_multiplier(ml) - 1) * bet
+    return calculate_ev(prob, payout, bet)
 
-def spread_to_ev(point, bet=100):
-    prob = 0.5 + (point / 50)
-    return round(prob * bet - (1 - prob) * bet, 2)
-
+# -------------------------------
+# FETCH DATA
+# -------------------------------
 @st.cache_data(ttl=3600)
 def fetch_games():
-    url = f"https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey={API_KEY}&regions=us&markets=spreads"
+    url = f"https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey={API_KEY}&regions=us&markets=moneyline"
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -51,18 +50,14 @@ def fetch_games():
                 away = g['away_team']
                 dt = datetime.fromisoformat(g['commence_time'].replace("Z", "+00:00"))
                 week = dt.isocalendar()[1]
+
                 outcomes = g['bookmakers'][0]['markets'][0]['outcomes']
-                if len(outcomes) >= 2:
-                    if 'price' in outcomes[0]:
-                        home_ml = outcomes[0]['price']
-                        away_ml = outcomes[1]['price']
-                        home_ev = get_moneyline_ev(home_ml)
-                        away_ev = get_moneyline_ev(away_ml)
-                    else:
-                        home_point = outcomes[0].get('point', 0)
-                        away_point = outcomes[1].get('point', 0)
-                        home_ev = spread_to_ev(home_point)
-                        away_ev = spread_to_ev(away_point)
+                home_ml = next((o['price'] for o in outcomes if o['name'] == home), None)
+                away_ml = next((o['price'] for o in outcomes if o['name'] == away), None)
+
+                if home_ml and away_ml:
+                    home_ev = get_moneyline_ev(home_ml)
+                    away_ev = get_moneyline_ev(away_ml)
                     results.append({
                         "Week": week,
                         "Date": dt.strftime("%b %d, %Y %I:%M %p"),
@@ -78,25 +73,37 @@ def fetch_games():
         return pd.DataFrame()
 
 # -------------------------------
-# STYLES
+# STYLES FOR GLASSY CARDS
 # -------------------------------
 st.markdown("""
-    <style>
-    body {background-color: #0e1117; color: #f0f0f0;}
-    .game-card {background: #1b1f29; padding: 1rem; border-radius: 12px; margin-bottom: 1rem; transition: transform 0.2s;}
-    .game-card:hover {transform: scale(1.02);}
-    .team {font-weight: bold; font-size: 1.2rem;}
-    .ev-positive {color: #06d6a0; font-weight: bold;}
-    .ev-negative {color: #ef476f; font-weight: bold;}
-    .game-date {color: #8a8a8a; font-size: 0.9rem;}
-    </style>
+<style>
+body {background: #0e1117; color: #f0f0f0; font-family: 'Helvetica', sans-serif;}
+
+.game-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 1px solid rgba(255,255,255,0.15);
+}
+.game-card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+.team {font-weight: 600; font-size: 1.2rem; margin-top: 0.2rem;}
+.ev-positive {color: #06d6a0; font-weight: bold;}
+.ev-negative {color: #ef476f; font-weight: bold;}
+.game-date {color: #aaa; font-size: 0.9rem; margin-bottom: 0.5rem;}
+</style>
 """, unsafe_allow_html=True)
 
 # -------------------------------
 # MAIN UI
 # -------------------------------
-st.title("🏈 NFL +EV Dashboard")
-st.markdown("Interactive game cards showing Home vs Away EV — hover over cards for a modern dashboard feel.")
+st.title("🏈 NFL +EV Glassy Dashboard with Sparklines")
+st.markdown("Interactive glassy cards showing Home vs Away EV with mini sparkline bars for quick visual comparison.")
 
 df = fetch_games()
 if df.empty:
@@ -130,7 +137,7 @@ else:
     elif sort_option == "Date":
         filtered_df = filtered_df.sort_values(by="Date")
 
-    # Display interactive cards
+    # Display glassy cards with mini sparklines
     for idx, row in filtered_df.iterrows():
         st.markdown(f"""
         <div class="game-card">
@@ -139,5 +146,26 @@ else:
             <div class="team">{row['Home Team']} <span class="{'ev-positive' if row['Home EV']>0 else 'ev-negative'}">${row['Home EV']}</span></div>
         </div>
         """, unsafe_allow_html=True)
+
+        # Mini sparkline
+        spark = go.Figure(go.Bar(
+            x=["Away", "Home"],
+            y=[row["Away EV"], row["Home EV"]],
+            marker_color=["#06d6a0" if row["Away EV"]>0 else "#ef476f",
+                          "#06d6a0" if row["Home EV"]>0 else "#ef476f"],
+            text=[row["Away EV"], row["Home EV"]],
+            textposition="auto"
+        ))
+        spark.update_layout(
+            height=80,
+            margin=dict(l=0,r=0,t=0,b=0),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            xaxis_showgrid=False,
+            yaxis_showgrid=False,
+            xaxis_tickfont_color="#f0f0f0",
+            yaxis_tickfont_color="#f0f0f0",
+        )
+        st.plotly_chart(spark, use_container_width=True, config={'displayModeBar': False})
 
 st.caption("Data provided by [The Odds API](https://the-odds-api.com). Built with ❤️ using Streamlit.")
