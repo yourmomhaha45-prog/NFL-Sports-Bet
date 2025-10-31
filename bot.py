@@ -2,14 +2,12 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
-from streamlit_extras.metric_cards import style_metric_cards
-from streamlit_extras.dataframe_explorer import dataframe_explorer
 
 # -------------------------------
-# CONFIG
+# PAGE CONFIG
 # -------------------------------
 st.set_page_config(
-    page_title="EV Sports Betting Dashboard",
+    page_title="NFL EV Dashboard",
     page_icon="🏈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -18,36 +16,7 @@ st.set_page_config(
 API_KEY = "558d1e3bfadf5243c8292da72801012f"
 
 # -------------------------------
-# STYLES
-# -------------------------------
-st.markdown("""
-    <style>
-    body {
-        background-color: #0e1117;
-        color: #f0f0f0;
-    }
-    .main-title {
-        font-size: 2.4rem;
-        font-weight: 700;
-        text-align: center;
-        margin-bottom: 0.5rem;
-        color: #06d6a0;
-    }
-    .sub-text {
-        text-align: center;
-        font-size: 1.1rem;
-        color: #8a8a8a;
-        margin-bottom: 2rem;
-    }
-    .dataframe th {
-        background-color: #20242b !important;
-        color: #fafafa !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# -------------------------------
-# FUNCTIONS
+# UTILITY FUNCTIONS
 # -------------------------------
 def moneyline_to_prob(ml):
     return 100 / (ml + 100) if ml > 0 else abs(ml) / (abs(ml) + 100)
@@ -99,9 +68,8 @@ def fetch_games():
                         "Date": dt.strftime("%b %d, %Y %I:%M %p"),
                         "Home Team": home,
                         "Away Team": away,
-                        "Market": "spreads",
-                        "Home EV ($)": home_ev,
-                        "Away EV ($)": away_ev
+                        "Home EV": home_ev,
+                        "Away EV": away_ev
                     })
             except:
                 continue
@@ -110,24 +78,38 @@ def fetch_games():
         return pd.DataFrame()
 
 # -------------------------------
-# UI LAYOUT
+# STYLES
 # -------------------------------
-st.markdown("<div class='main-title'>🏈 Sports Betting EV Dashboard</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-text'>Analyze expected value for upcoming NFL games — profitable plays at a glance.</div>", unsafe_allow_html=True)
+st.markdown("""
+    <style>
+    body {background-color: #0e1117; color: #f0f0f0;}
+    .game-card {background: #1b1f29; padding: 1rem; border-radius: 12px; margin-bottom: 1rem; transition: transform 0.2s;}
+    .game-card:hover {transform: scale(1.02);}
+    .team {font-weight: bold; font-size: 1.2rem;}
+    .ev-positive {color: #06d6a0; font-weight: bold;}
+    .ev-negative {color: #ef476f; font-weight: bold;}
+    .game-date {color: #8a8a8a; font-size: 0.9rem;}
+    </style>
+""", unsafe_allow_html=True)
+
+# -------------------------------
+# MAIN UI
+# -------------------------------
+st.title("🏈 NFL +EV Dashboard")
+st.markdown("Interactive game cards showing Home vs Away EV — hover over cards for a modern dashboard feel.")
 
 df = fetch_games()
-
 if df.empty:
     st.error("No data available. Check your API key or wait for odds updates.")
 else:
     # Sidebar filters
-    st.sidebar.header("🔍 Filters")
+    st.sidebar.header("Filters")
     week_filter = st.sidebar.multiselect("Select Week", sorted(df["Week"].unique()), default=sorted(df["Week"].unique()))
     team_filter = st.sidebar.multiselect(
         "Select Teams",
-        sorted(set(df["Home Team"].unique()) | set(df["Away Team"].unique())),
-        default=[]
+        sorted(set(df["Home Team"].unique()) | set(df["Away Team"].unique()))
     )
+    sort_option = st.sidebar.radio("Sort by", ["Highest EV", "Home EV", "Away EV", "Week", "Date"])
 
     filtered_df = df[df["Week"].isin(week_filter)]
     if team_filter:
@@ -135,32 +117,27 @@ else:
             filtered_df["Home Team"].isin(team_filter) | filtered_df["Away Team"].isin(team_filter)
         ]
 
-    # KPIs
-    avg_home_ev = filtered_df["Home EV ($)"].mean()
-    avg_away_ev = filtered_df["Away EV ($)"].mean()
-    best_bet = filtered_df.loc[
-        (filtered_df["Home EV ($)"].abs() + filtered_df["Away EV ($)"].abs()).idxmax()
-    ]
+    # Sorting
+    if sort_option == "Highest EV":
+        filtered_df["Max EV"] = filtered_df[["Home EV", "Away EV"]].max(axis=1)
+        filtered_df = filtered_df.sort_values(by="Max EV", ascending=False)
+    elif sort_option == "Home EV":
+        filtered_df = filtered_df.sort_values(by="Home EV", ascending=False)
+    elif sort_option == "Away EV":
+        filtered_df = filtered_df.sort_values(by="Away EV", ascending=False)
+    elif sort_option == "Week":
+        filtered_df = filtered_df.sort_values(by="Week")
+    elif sort_option == "Date":
+        filtered_df = filtered_df.sort_values(by="Date")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Average Home EV", f"${avg_home_ev:,.2f}")
-    col2.metric("Average Away EV", f"${avg_away_ev:,.2f}")
-    col3.metric("Top Game", f"{best_bet['Away Team']} @ {best_bet['Home Team']}")
-    style_metric_cards(background_color="#20242b", border_color="#333", border_left_color="#06d6a0")
-
-    # Display filtered table
-    st.markdown("### 📊 Game Data")
-    st.dataframe(
-        filtered_df.style.applymap(
-            lambda x: "color: #06d6a0; font-weight:600;" if isinstance(x, (int, float)) and x > 0 else ""
-        ),
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # Interactive explorer
-    with st.expander("🔎 Explore and Search Games"):
-        explored = dataframe_explorer(filtered_df)
-        st.dataframe(explored, use_container_width=True, hide_index=True)
+    # Display interactive cards
+    for idx, row in filtered_df.iterrows():
+        st.markdown(f"""
+        <div class="game-card">
+            <div class="game-date">{row['Date']} | Week {row['Week']}</div>
+            <div class="team">{row['Away Team']} <span class="{'ev-positive' if row['Away EV']>0 else 'ev-negative'}">${row['Away EV']}</span></div>
+            <div class="team">{row['Home Team']} <span class="{'ev-positive' if row['Home EV']>0 else 'ev-negative'}">${row['Home EV']}</span></div>
+        </div>
+        """, unsafe_allow_html=True)
 
 st.caption("Data provided by [The Odds API](https://the-odds-api.com). Built with ❤️ using Streamlit.")
