@@ -92,27 +92,37 @@ st.sidebar.header("⚙️ Settings")
 ev_filter = st.sidebar.slider("Minimum EV ($)", -50.0, 100.0, 0.0,5.0)
 bet_amount = st.sidebar.number_input("Bet Amount per Game ($)", value=DEFAULT_BET, step=10)
 
-# --- MODERN DARK CSS WITH GRADIENTS & BLURRED SIDEBAR ---
+# --- MODERN TEXTURED BACKGROUND CSS ---
 st.markdown("""
 <style>
 body {
-    background: linear-gradient(135deg,#1b1b2f,#12121a);
+    background-color: #12121a;
     color: #e0e0e0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin:0; padding:0;
+    
+    /* Textured background */
+    background-image: 
+        linear-gradient(135deg,#1b1b2f,#12121a),
+        url('https://www.transparenttextures.com/patterns/asfalt-dark.png');
+    background-repeat: repeat;
+    background-size: auto;
 }
+
 h1,h2,h3 { 
     color:#b67aff; 
     margin-bottom:0.5rem; 
     letter-spacing:0.5px;
     text-shadow: 0 0 8px rgba(182,122,255,0.5);
 }
+
 .css-1d391kg {
     background: rgba(28,28,40,0.9);
     backdrop-filter: blur(8px);
     border-radius: 16px;
     padding: 20px;
 }
+
 .card {
     background: linear-gradient(145deg,#1f1f2a,#212130);
     border-radius: 16px;
@@ -125,6 +135,7 @@ h1,h2,h3 {
     transform: translateY(-6px) scale(1.02);
     box-shadow: 0 8px 32px rgba(127,90,240,0.6);
 }
+
 .glow-badge {
     background: linear-gradient(135deg,#7f5af0,#b67aff);
     color:white;
@@ -139,6 +150,7 @@ h1,h2,h3 {
     from { box-shadow:0 0 6px rgba(182,122,255,0.4),0 0 18px rgba(127,90,240,0.2); }
     to { box-shadow:0 0 18px rgba(182,122,255,0.8),0 0 36px rgba(127,90,240,0.6); }
 }
+
 .card h4 { margin:0; font-weight:600; font-size:1.1rem; }
 .card p { margin:4px 0; font-size:0.9rem; color:#ccc; }
 </style>
