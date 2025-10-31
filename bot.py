@@ -9,7 +9,7 @@ REGION = "us"
 DEFAULT_BET = 100
 ODDS_API_KEY = "558d1e3bfadf5243c8292da72801012f"
 
-# Helper functions
+# Utility functions
 def moneyline_to_prob(ml):
     if ml > 0:
         return 100 / (ml + 100)
@@ -27,6 +27,9 @@ def get_moneyline_ev(odds, bet=DEFAULT_BET):
 def spread_to_ev(point, bet=DEFAULT_BET):
     prob = 0.5 + (point / 50)
     return round(prob * bet - (1 - prob) * bet, 2)
+
+def moneyline_to_multiplier(ml):
+    return ml / 100 + 1 if ml > 0 else 100 / abs(ml) + 1
 
 @st.cache_data(ttl=3600)
 def get_available_markets():
@@ -52,7 +55,6 @@ def get_upcoming_games(markets):
             games = resp.json()
         except:
             continue
-
         for g in games:
             try:
                 home_team = g['home_team']
@@ -62,7 +64,6 @@ def get_upcoming_games(markets):
                 bookmaker = g['bookmakers'][0]
                 market_data = bookmaker['markets'][0]
                 outcomes = market_data['outcomes']
-
                 if market == "moneyline" and len(outcomes) >= 2:
                     home_ml = outcomes[0]['price']
                     away_ml = outcomes[1]['price']
@@ -73,7 +74,6 @@ def get_upcoming_games(markets):
                     away_point = outcomes[1].get('point', 0)
                     home_ev = spread_to_ev(home_point, DEFAULT_BET)
                     away_ev = spread_to_ev(away_point, DEFAULT_BET)
-
                 all_data.append({
                     "Week": week_num,
                     "Date": game_time,
@@ -86,178 +86,183 @@ def get_upcoming_games(markets):
             except:
                 continue
     if not all_data:
-        return pd.DataFrame()  # empty DataFrame if no data
+        return pd.DataFrame()
     df = pd.DataFrame(all_data)
     df.sort_values(by=["Week", "Date"], inplace=True)
     return df
 
-def calculate_best_bet(df, bet_amount):
+def calculate_best_bet(df, bet):
     df["Best Bet"] = df.apply(lambda row: row["Home Team"] if row["Home EV ($)"] > row["Away EV ($)"] else row["Away Team"], axis=1)
     df["Best EV ($)"] = df[["Home EV ($)", "Away EV ($)"]].max(axis=1)
     return df
 
-# --- UI & Layout ---
-st.set_page_config(page_title="NFL +EV Bot", layout="wide", page_icon="🏈")
+# --- UI & Style ---
+st.set_page_config(layout="wide", page_title="NFL +EV Modern Dashboard", page_icon="🏈")
 
-# Custom CSS for a sleek, modern dark theme
+# Custom CSS for ultra-modern look
 st.markdown(
     """
     <style>
         body {
-            background-color: #121212;
+            background-color: #0f0f0f;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            color: #e0e0e0;
+            color: #fff;
         }
         h1 {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 3rem;
             text-align: center;
-            font-size: 2.5rem;
-            margin-top: 20px;
-            margin-bottom: 10px;
+            margin-top: 30px;
+            margin-bottom: 20px;
+            letter-spacing: 2px;
             color: #00ffff;
         }
-        /* Sidebar styling */
+        /* Sidebar */
         .sidebar .sidebar-content {
-            background-color: #1f1f2e;
+            background-color: #1c1c1c;
             padding: 20px;
-            border-radius: 12px;
+            border-radius: 20px;
         }
-        /* Inputs styling */
+        /* Filters inputs */
         .stSlider, .stNumberInput {
-            background-color: #2e2e3e;
-            border-radius: 8px;
+            background-color: #2a2a2a;
+            border-radius: 10px;
         }
-        /* Cards styling */
-        .game-card {
+        /* Card grid */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        /* Card styles */
+        .card {
             background-color: #1f1f2e;
-            border-radius: 12px;
+            border-radius: 15px;
             padding: 20px;
-            margin: 10px 0;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             cursor: pointer;
+            transition: all 0.3s ease;
         }
-        .game-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+        .card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
-        /* Badge style */
+        /* Badge */
         .badge {
+            display: inline-block;
             background-color: #00ffff;
             color: #000;
-            padding: 4px 12px;
+            padding: 5px 12px;
             border-radius: 8px;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             font-weight: 600;
-            display: inline-block;
-            margin-top: 8px;
+            margin-top: 10px;
         }
-        /* Modal overlay */
+        /* Modal overlay for details */
         .modal {
             position: fixed;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            background: rgba(18, 18, 18, 0.8);
+            background: rgba(0,0,0,0.8);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 9999;
+            opacity: 1;
+            transition: opacity 0.3s ease;
         }
-        .modal-content {
+        /* Modal content box */
+        .modal-box {
             background-color: #2e2e3e;
             padding: 30px;
-            border-radius: 12px;
+            border-radius: 15px;
             max-width: 600px;
             width: 90%;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-            color: #e0e0e0;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+            color: #fff;
             position: relative;
         }
+        /* Close button */
         .close-btn {
             position: absolute;
-            top: 10px; right: 10px;
+            top: 10px;
+            right: 15px;
             background: #00ffff;
             border: none;
-            color: #000;
-            padding: 6px 12px;
-            border-radius: 6px;
+            padding: 8px 14px;
+            border-radius: 8px;
             cursor: pointer;
+            font-weight: bold;
         }
     </style>
-    """,
-    unsafe_allow_html=True
+    """, unsafe_allow_html=True
 )
 
-# Title
-st.markdown("<h1>🏈 NFL +EV Bot – Modern Dashboard</h1>", unsafe_allow_html=True)
+# Page title
+st.markdown("<h1>🏈 NFL +EV — Modern Dashboard</h1>", unsafe_allow_html=True)
 
 # Filters sidebar
-st.sidebar.header("⚙️ Settings")
-ev_filter = st.sidebar.slider("Minimum EV ($)", -50.0, 100.0, 0.0, 5.0)
-bet_amount = st.sidebar.number_input("Bet Amount per Game ($)", value=DEFAULT_BET, step=10)
+st.sidebar.header("⚙️ Filters")
+ev_threshold = st.sidebar.slider("Minimum EV ($)", -50.0, 100.0, 0.0, 5.0)
+bet_amount = st.sidebar.number_input("Bet per Game ($)", value=DEFAULT_BET, step=10)
 
 # Fetch data
-available_markets = get_available_markets()
-games_df = get_upcoming_games(available_markets)
+markets = get_available_markets()
+df_games = get_upcoming_games(markets)
 
-if games_df.empty:
+# Check data
+if df_games.empty:
     st.warning("No upcoming games found.")
     st.stop()
 
-# Calculate best bets and filter
-games_df = calculate_best_bet(games_df, bet_amount)
-games_df = games_df[games_df["Best EV ($)"] >= ev_filter]
+# Calculate best bets
+df_games = calculate_best_bet(df_games, bet_amount)
+df_games = df_games[df_games["Best EV ($)"] >= ev_threshold]
 
-# Create tabs per week
-weeks = sorted(games_df["Week"].unique())
-week_tabs = st.tabs([f"Week {w}" for w in weeks])
+# Display
+st.markdown("## Upcoming Games & Bets")
+# Grid layout
+import math
+col_count = 3
+cols = st.columns(col_count)
 
-# Show data in each week
-for i, week in enumerate(weeks):
-    with week_tabs[i]:
-        week_df = games_df[games_df["Week"] == week]
-        market_tabs = st.tabs([m.title() for m in available_markets])
-        for j, market in enumerate(available_markets):
-            with market_tabs[j]:
-                market_df = week_df[week_df["Market"] == market]
-                st.markdown(f"<h2 style='text-align:center;'>Week {week} - {market.title()}</h2>", unsafe_allow_html=True)
-                total_ev = market_df["Best EV ($)"].sum()
-                num_bets = market_df.shape[0]
-                st.markdown(f"<p style='text-align:center; font-weight:600;'>Bets: {num_bets} | Total EV: ${total_ev}</p>", unsafe_allow_html=True)
+# Store selected game for modal
+if "selected_game_idx" not in st.session_state:
+    st.session_state["selected_game_idx"] = None
 
-                # Display cards in 3 columns
-                cols = st.columns(3)
-                for idx, (_, game) in enumerate(market_df.iterrows()):
-                    col = cols[idx % 3]
-                    with col:
-                        st.markdown(
-                            f"""
-                            <div class="game-card" onclick="document.querySelector('[data-key={idx}] button').click();">
-                                <h4>{game['Away Team']} @ {game['Home Team']}</h4>
-                                <p style="opacity:0.7;">{game['Date'].strftime("%b %d, %I:%M %p")}</p>
-                                <div class="badge">Best Bet: {game['Best Bet']}</div>
-                                <p style="margin-top:4px;">EV: <strong>${game['Best EV ($)']}</strong></p>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                        # Invisible button to trigger modal
-                        if st.button("", key=f"btn_{idx}_{week}_{market}"):
-                            st.session_state["modal_open"] = idx
+for i, (_, game) in enumerate(df_games.iterrows()):
+    col = cols[i % col_count]
+    with col:
+        # create a card with hover effect
+        st.markdown(
+            f"""
+            <div class="card" onclick="window.parent.postMessage({{'type':'select_game','index':{i}}},'*')">
+                <h3 style="margin-bottom:10px;">{game['Away Team']} @ {game['Home Team']}</h3>
+                <p style="font-size:0.9rem; opacity:0.7;">{game['Date'].strftime('%b %d, %H:%M')}</p>
+                <div class="badge">Best Bet: {game['Best Bet']}</div>
+                <p style="margin-top:8px;">EV: ${game['Best EV ($)']}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        # invisible button to trigger modal
+        if st.button("🔍", key=f"btn_{i}"):
+            st.session_state["selected_game_idx"] = i
 
-# Modal for selected game
-if st.session_state.get("modal_open") is not None:
-    idx = st.session_state["modal_open"]
-    game = games_df.iloc[idx]
+# Modal for game details
+if st.session_state["selected_game_idx"] is not None:
+    idx = st.session_state["selected_game_idx"]
+    game = df_games.iloc[idx]
     st.markdown(
         f"""
         <div class="modal" style="display:flex;">
-            <div class="modal-content">
-                <button class="close-btn" onclick="document.querySelector('.modal').style.display='none';">Close</button>
+            <div class="modal-box">
+                <button class="close-btn" onclick="window.parent.postMessage({{'type':'close_modal'}},'*')">Close</button>
                 <h2>{game['Away Team']} @ {game['Home Team']}</h2>
-                <p>Date: {game['Date'].strftime("%b %d, %I:%M %p")}</p>
-                <p>Market: {game['Market']}</p>
-                <p>Home EV: ${game['Home EV ($)']}</p>
-                <p>Away EV: ${game['Away EV ($)']}</p>
+                <p><b>Date:</b> {game['Date'].strftime('%b %d, %H:%M')}</p>
+                <p><b>Market:</b> {game['Market']}</p>
+                <p><b>Home EV:</b> ${game['Home EV ($)']}</p>
+                <p><b>Away EV:</b> ${game['Away EV ($)']}</p>
                 <div class="badge">Best Bet: {game['Best Bet']}</div>
             </div>
         </div>
