@@ -3,11 +3,11 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-# --- Constants ---
+# --- CONFIGURATION ---
 SPORT = "americanfootball_nfl"
 REGION = "us"
+API_KEY = "558d1e3bfadf5243c8292da72801012f"  # Your provided API key
 DEFAULT_BET = 100
-API_KEY = "YOUR_API_KEY"  # Replace with your actual API key
 
 # --- Utility functions ---
 def moneyline_to_prob(ml):
@@ -31,17 +31,24 @@ def spread_to_ev(point, bet=DEFAULT_BET):
 def moneyline_to_multiplier(ml):
     return ml / 100 + 1 if ml > 0 else 100 / abs(ml) + 1
 
-# --- Data fetching with robustness ---
+# --- Fetch available markets ---
 @st.cache_data(ttl=3600)
 def get_available_markets():
     try:
-        resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={API_KEY}&regions={REGION}")
+        url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={API_KEY}&regions={REGION}"
+        resp = requests.get(url)
         resp.raise_for_status()
         data = resp.json()
-        return [m["key"] for m in data[0]["bookmakers"][0]["markets"]]
-    except:
+        st.write("Available markets from API:", data)  # Debug log
+        if data:
+            return [m["key"] for m in data[0]["bookmakers"][0]["markets"]]
+        else:
+            return ["spreads"]
+    except Exception as e:
+        st.write("Error fetching markets:", e)
         return ["spreads"]
 
+# --- Fetch upcoming games ---
 @st.cache_data(ttl=3600)
 def get_upcoming_games(markets):
     all_games = []
@@ -51,7 +58,12 @@ def get_upcoming_games(markets):
             resp = requests.get(url)
             resp.raise_for_status()
             games = resp.json()
-        except:
+            st.write(f"API response for market '{market}':", games)  # Debug log
+        except Exception as e:
+            st.write(f"Error fetching data for market '{market}': {e}")
+            continue
+
+        if not games:
             continue
 
         for g in games:
@@ -82,7 +94,8 @@ def get_upcoming_games(markets):
                     "Home EV": round(home_ev, 2),
                     "Away EV": round(away_ev, 2)
                 })
-            except:
+            except Exception as e:
+                st.write("Error parsing game:", e)
                 continue
     if not all_games:
         return pd.DataFrame()
@@ -90,31 +103,18 @@ def get_upcoming_games(markets):
     df.sort_values(by=["Week", "Date"], inplace=True)
     return df
 
-def compute_bets(df, bet_amount):
-    df['Best Bet'] = df.apply(
-        lambda row: row['Home Team'] if row['Home EV'] > row['Away EV'] else row['Away Team'], axis=1)
-    df['Best EV'] = df[['Home EV', 'Away EV']].max(axis=1)
-    return df
+# --- Main app ---
+st.set_page_config(layout="wide", page_title="Futuristic NFL +EV Dashboard", page_icon="🏈")
 
-# --- Custom CSS for futuristic UI ---
-st.set_page_config(
-    layout="wide",
-    page_title="Futuristic NFL +EV Dashboard",
-    page_icon="🏈"
-)
-
+# --- Custom CSS for futuristic look ---
 st.markdown(
     """
     <style>
-        /* Background gradient with glow */
         body {
             background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
             font-family: 'Orbitron', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             color: #fff;
-            margin: 0;
-            padding: 0;
         }
-        /* Title with glow effect */
         h1 {
             font-family: 'Orbitron', sans-serif;
             font-size: 4rem;
@@ -122,16 +122,16 @@ st.markdown(
             margin-top: 30px;
             margin-bottom: 20px;
             color: #00ffff;
-            text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff;
+            text-shadow: 0 0 15px #00ffff, 0 0 30px #00ffff;
         }
-        /* Sidebar style */
+        /* Sidebar styling */
         .sidebar .sidebar-content {
-            background: rgba(20, 20, 20, 0.8);
+            background: rgba(20,20,20,0.8);
             padding: 20px;
             border-radius: 20px;
             box-shadow: 0 0 20px #00ffff55;
         }
-        /* Inputs style */
+        /* Inputs */
         .stSlider, .stNumberInput {
             background: #222;
             border-radius: 10px;
@@ -159,7 +159,7 @@ st.markdown(
             box-shadow: inset 0 0 15px #00ffff66, 0 0 30px #00ffff66;
             transform: translateY(-4px);
         }
-        /* Label styles */
+        /* Labels & badges */
         .label {
             display: inline-block;
             padding: 4px 12px;
@@ -176,12 +176,12 @@ st.markdown(
             50% { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
         }
-        /* Modal overlay style */
+        /* Modal overlay styles */
         .modal {
             position: fixed;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            background: rgba(15, 15, 15, 0.9);
+            background: rgba(15,15,15,0.9);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -189,7 +189,7 @@ st.markdown(
             opacity: 1;
             transition: opacity 0.3s ease;
         }
-        /* Modal content style */
+        /* Modal content box */
         .modal-box {
             background: rgba(20,20,20,0.95);
             padding: 30px;
@@ -227,62 +227,57 @@ st.markdown(
 st.markdown("<h1>🏈 FUTURISTIC NFL +EV DASHBOARD</h1>", unsafe_allow_html=True)
 
 # --- SIDEBAR ---
-st.sidebar.header("Settings & Filters")
+st.sidebar.header("Filters & Settings")
 ev_threshold = st.sidebar.slider("Minimum EV ($)", -50, 100, 0, 5)
 bet_amount = st.sidebar.number_input("Bet Amount ($)", value=DEFAULT_BET, step=10)
 
-# --- Fetch & Process Data ---
+# --- Fetch & process data ---
 markets = get_available_markets()
-df_games = get_upcoming_games(markets)
+df = get_upcoming_games(markets)
 
-if df_games.empty:
-    st.warning("No upcoming game data available.")
+if df.empty:
+    st.warning("No upcoming game data available. Check your API key, sport parameters, or if the API has current data.")
     st.stop()
 
-df_games = compute_bets(df_games, bet_amount)
-df_games = df_games[df_games["Best EV"] >= ev_threshold]
+# Compute best bets and filter
+df = compute_bets(df, bet_amount)
+df = df[df["Best EV"] >= ev_threshold]
 
-# --- Display Cards ---
+# --- Display cards ---
 st.markdown("<h2 style='text-align:center; margin-top:30px;'>Upcoming Matches & Bets</h2>", unsafe_allow_html=True)
 
-grid_html = '<div class="cards-grid">'
-for idx, row in df_games.iterrows():
+cards_html = '<div class="cards-grid">'
+for idx, row in df.iterrows():
     html = f"""
     <div class="card" onclick="window.parent.postMessage({{'type':'show_detail','index':{idx}}},'*')">
-        <div style="display:flex; justify-content: space-between; align-items: center;">
-            <h3 style="margin:0;">{row['Away Team']} @ {row['Home Team']}</h3>
-            <div class="label">{row['Market'].replace('_', ' ').title()}</div>
-        </div>
-        <p style="opacity:0.7; margin-top:8px;">{row['Date'].strftime('%b %d, %H:%M')}</p>
-        <div style="margin-top:10px;">
-            <div style="margin-bottom:8px;">
-                <strong>Best Bet:</strong> {row['Best Bet']}
-            </div>
-            <div class="label" style="background: linear-gradient(45deg, #00ffff, #ff00ff); font-size:0.8rem;">
-                EV: ${row['Best EV']}
-            </div>
+        <h3 style='margin-bottom:8px;'>{row['Away Team']} @ {row['Home Team']}</h3>
+        <p style='opacity:0.7; font-size:0.9rem;'>{row['Date'].strftime('%b %d, %H:%M')}</p>
+        <div class='label'>Market: {row['Market'].replace('_', ' ').title()}</div>
+        <div style='margin-top:10px;'>
+            <strong>Best Bet:</strong> {row['Best Bet']}<br>
+            <strong>EV:</strong> ${row['Best EV']}
         </div>
     </div>
     """
-    grid_html += html
-grid_html += '</div>'
-st.markdown(grid_html, unsafe_allow_html=True)
+    cards_html += html
+cards_html += '</div>'
+st.markdown(cards_html, unsafe_allow_html=True)
 
-# --- Modal for details ---
+# --- Modal for game details ---
 if st.session_state.get("show_detail_idx") is not None:
     idx = st.session_state["show_detail_idx"]
-    game = df_games.iloc[idx]
+    game = df.iloc[idx]
     st.markdown(
         f"""
         <div class="modal">
             <div class="modal-box">
                 <button class="close-btn" onclick="window.parent.postMessage({{'type':'close_modal'}},'*')">X</button>
-                <h2 style="text-align:center;">{game['Away Team']} @ {game['Home Team']}</h2>
+                <h2 style='text-align:center;'>{game['Away Team']} @ {game['Home Team']}</h2>
                 <p><strong>Date:</strong> {game['Date'].strftime('%b %d, %H:%M')}</p>
                 <p><strong>Market:</strong> {game['Market'].replace('_', ' ').title()}</p>
                 <p><strong>Home EV:</strong> ${game['Home EV']}</p>
                 <p><strong>Away EV:</strong> ${game['Away EV']}</p>
-                <div class="label">Best Bet: {game['Best Bet']}</div>
+                <div class='label'>Best Bet: {game['Best Bet']}</div>
             </div>
         </div>
         """, unsafe_allow_html=True
