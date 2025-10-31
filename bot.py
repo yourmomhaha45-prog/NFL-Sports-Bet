@@ -1,27 +1,13 @@
-Perfect! Here's the **fully upgraded `bot.py`** for your NFL +EV Bot with:
-
-* **Animated fade-in cards**
-* **Pulse animation on the highest EV card**
-* **Clickable cards with modal pop-ups that don’t reload the page**
-* **Clean modern dark textured background**
-* **Purple glowing badges**
-* **Smooth hover and transition effects**
-
-You can replace your current `bot.py` with this:
-
-```python
 import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
 
-# ---------------- CONFIG ----------------
 SPORT = "americanfootball_nfl"
 REGION = "us"
 DEFAULT_BET = 100
 ODDS_API_KEY = "558d1e3bfadf5243c8292da72801012f"  # replace with your key
 
-# ---------------- FUNCTIONS ----------------
 def moneyline_to_multiplier(ml):
     return ml / 100 + 1 if ml > 0 else 100 / abs(ml) + 1
 
@@ -58,7 +44,6 @@ def get_upcoming_games(markets):
                 away_team = g['away_team']
                 game_time = datetime.fromisoformat(g['commence_time'].replace("Z","+00:00"))
                 week_number = game_time.isocalendar()[1]
-
                 if market == "moneyline":
                     home_ml = g['bookmakers'][0]['markets'][0]['outcomes'][0]['price']
                     away_ml = g['bookmakers'][0]['markets'][0]['outcomes'][1]['price']
@@ -69,7 +54,6 @@ def get_upcoming_games(markets):
                     away_point = g['bookmakers'][0]['markets'][0]['outcomes'][1].get('point',0)
                     home_ev = spread_to_ev(home_point, DEFAULT_BET)
                     away_ev = spread_to_ev(away_point, DEFAULT_BET)
-
                 data.append({
                     "Week": week_number,
                     "Date": game_time,
@@ -90,17 +74,14 @@ def calculate_best_bet(df):
     df["Best EV ($)"] = df[["Home EV ($)","Away EV ($)"]].max(axis=1)
     return df
 
-# ---------------- APP CONFIG ----------------
 st.set_page_config(page_title="NFL +EV Bot", layout="wide", page_icon="🏈")
 if "modal_open" not in st.session_state:
     st.session_state["modal_open"] = None
 
-# ---------------- SIDEBAR ----------------
 st.sidebar.header("⚙️ Settings")
 ev_filter = st.sidebar.slider("Minimum EV ($)", -50.0, 100.0, 0.0,5.0)
 bet_amount = st.sidebar.number_input("Bet Amount per Game ($)", value=DEFAULT_BET, step=10)
 
-# ---------------- MODERN CSS ----------------
 st.markdown("""
 <style>
 body {
@@ -141,11 +122,9 @@ h1,h2,h3 { color:#b57aff; margin-bottom:0.6rem; letter-spacing:0.4px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- HEADER ----------------
 st.markdown("<h1 style='text-align:center;'>🏈 NFL +EV Bot – Modern Interactive</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center; opacity:0.8;'>Click a card to see full game details</p>", unsafe_allow_html=True)
 
-# ---------------- DATA ----------------
 available_markets = get_available_markets()
 games_df = get_upcoming_games(available_markets)
 if games_df.empty:
@@ -156,7 +135,6 @@ games_df = calculate_best_bet(games_df)
 games_df = games_df[games_df["Best EV ($)"]>=ev_filter]
 weeks = sorted(games_df["Week"].unique())
 
-# ---------------- WEEK & MARKET TABS ----------------
 week_tabs = st.tabs([f"Week {w}" for w in weeks])
 for i, week in enumerate(weeks):
     with week_tabs[i]:
@@ -170,7 +148,6 @@ for i, week in enumerate(weeks):
                 num_bets = market_df.shape[0]
                 st.markdown(f"<p style='text-align:center; font-weight:600;'>Simulated Bets: {num_bets} | Total Expected Profit: ${total_ev}</p>", unsafe_allow_html=True)
 
-                # ---------------- CARD GRID ----------------
                 cols = st.columns(3)
                 c_idx = 0
                 max_ev_idx = market_df["Best EV ($)"].idxmax()
@@ -189,37 +166,21 @@ for i, week in enumerate(weeks):
                         """, unsafe_allow_html=True)
                     c_idx = (c_idx + 1) % 3
 
-# ---------------- MODAL ----------------
 if st.session_state["modal_open"] is not None:
     game = market_df.iloc[st.session_state["modal_open"]]
-    st.markdown(f"""
-    <div class="modal-overlay">
-        <div class="modal-card">
-            <h2>{game['Away Team']} @ {game['Home Team']}</h2>
-            <p>Date: {game['Date'].strftime("%b %d, %I:%M %p")}</p>
-            <p>Market: {game['Market']}</p>
-            <p>Home EV: ${game['Home EV ($)']}</p>
-            <p>Away EV: ${game['Away EV ($)']}</p>
-            <p><span class="glow-badge">Best Bet: {game['Best Bet']}</span></p>
-            <button class="close-btn" onclick="window.location.reload();">Close</button>
+    close_modal = st.button("Close Modal", key="close_modal_button")
+    if close_modal:
+        st.session_state["modal_open"] = None
+    else:
+        st.markdown(f"""
+        <div class="modal-overlay">
+            <div class="modal-card">
+                <h2>{game['Away Team']} @ {game['Home Team']}</h2>
+                <p>Date: {game['Date'].strftime("%b %d, %I:%M %p")}</p>
+                <p>Market: {game['Market']}</p>
+                <p>Home EV: ${game['Home EV ($)']}</p>
+                <p>Away EV: ${game['Away EV ($)']}</p>
+                <p><span class="glow-badge">Best Bet: {game['Best Bet']}</span></p>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
-```
-
----
-
-This script now has:
-
-* **Modern dark textured background**
-* **Animated fade-in cards**
-* **Subtle pulsing glow on the card with highest EV**
-* **Clickable cards with pop-up modal overlay** (no page reload for future improvement)
-* **Purple glowing Best Bet badges**
-* **Clean, consistent typography and spacing**
-
----
-
-If you want, I can **make the modal fully interactive without needing a page reload**, using only Streamlit session state, so the modal opens/closes smoothly while the cards stay in place.
-
-Do you want me to do that next?
+        """, unsafe_allow_html=True)
