@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
+import random
 
 # --- CONFIG ---
 SPORT = "americanfootball_nfl"
@@ -28,10 +29,6 @@ def get_available_markets():
     try:
         resp = requests.get(url)
         resp.raise_for_status()
-        if isinstance(resp.json(), dict) and resp.json().get("message"):
-            st.warning("Check your API key and plan: some markets may be unavailable.")
-            return ["spreads"]  # default safe market
-        # detect markets present in first game
         first_game = resp.json()[0]
         available = [m["key"] for m in first_game["bookmakers"][0]["markets"]]
         return available
@@ -148,14 +145,15 @@ h1,h2,h3 {{color:{accent_color}; text-shadow: 2px 2px 6px #000000;}}
     50% {{ box-shadow: 0 0 15px #ffd700, 0 0 25px #d4af37, 0 0 35px #ffd700; }}
     100% {{ box-shadow: 0 0 5px #ffd700, 0 0 10px #d4af37, 0 0 15px #ffd700; }}
 }}
-/* Animated gold particles */
 .particle {{
     position: absolute;
-    width: 4px; height: 4px;
+    bottom: 0;
     background: gold;
     border-radius: 50%;
-    animation: float 5s infinite linear;
     opacity: 0.7;
+    animation-name: float;
+    animation-iteration-count: infinite;
+    animation-timing-function: linear;
 }}
 @keyframes float {{
     0% {{ transform: translateY(0) translateX(0); opacity:0.5; }}
@@ -165,14 +163,17 @@ h1,h2,h3 {{color:{accent_color}; text-shadow: 2px 2px 6px #000000;}}
 </style>
 """, unsafe_allow_html=True)
 
-# Add particles
-for i in range(30):
-    x = st.session_state.get(f"x{i}", None)
-    if not x:
-        import random
-        x = random.randint(0, 100)
-        st.session_state[f"x{i}"] = x
-    st.markdown(f'<div class="particle" style="left:{x}%; top:100%;"></div>', unsafe_allow_html=True)
+# --- Floating gold particles ---
+particle_html = ""
+num_particles = 20
+for i in range(num_particles):
+    left = random.randint(0,100)
+    size = random.randint(2,5)
+    duration = random.randint(4,8)
+    particle_html += f"""
+    <div class="particle" style="left:{left}%; width:{size}px; height:{size}px; animation-duration:{duration}s;"></div>
+    """
+st.markdown(particle_html, unsafe_allow_html=True)
 
 # --- HEADER ---
 st.markdown("<h1 style='text-align:center;'>🏈 NFL +EV Bot – Lost Mine Edition</h1>", unsafe_allow_html=True)
@@ -189,7 +190,7 @@ games_df = calculate_best_bet(games_df)
 games_df = games_df[games_df["Best EV ($)"]>=ev_filter]
 weeks = sorted(games_df["Week"].unique())
 
-# --- WEEK TABS ---
+# --- WEEK & MARKET TABS ---
 week_tabs = st.tabs([f"Week {w}" for w in weeks])
 for i, week in enumerate(weeks):
     with week_tabs[i]:
@@ -209,4 +210,13 @@ for i, week in enumerate(weeks):
                     with cols[c_idx]:
                         st.markdown(
                             f"""
-                           
+                            <div class="card">
+                                <h4>{game['Away Team']} @ {game['Home Team']}</h4>
+                                <p style="font-size:13px; opacity:0.8;">{game['Date'].strftime("%b %d, %I:%M %p")}</p>
+                                <p><span class="glow-badge">Best Bet: {game['Best Bet']}</span></p>
+                                <p>EV: ${game['Best EV ($)']}</p>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                    c_idx = (c_idx + 1) % 3
