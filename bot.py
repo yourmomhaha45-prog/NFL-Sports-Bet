@@ -16,29 +16,26 @@ def moneyline_to_prob(ml):
     else:
         return abs(ml) / (abs(ml) + 100)
 
-def calculate_ev(probability, payout, bet_amount):
-    return probability * payout - (1 - probability) * bet_amount
+def calculate_ev(prob, payout, bet):
+    return prob * payout - (1 - prob) * bet
 
-def get_moneyline_ev(odds, bet_amount=DEFAULT_BET):
+def get_moneyline_ev(odds, bet=DEFAULT_BET):
     prob = moneyline_to_prob(odds)
-    payout = (moneyline_to_multiplier(odds) - 1) * bet_amount
-    ev = calculate_ev(prob, payout, bet_amount)
-    return ev
+    payout = (moneyline_to_multiplier(odds) - 1) * bet
+    return calculate_ev(prob, payout, bet)
 
-def moneyline_to_multiplier(ml):
-    return ml / 100 + 1 if ml > 0 else 100 / abs(ml) + 1
+def spread_to_ev(point, bet=DEFAULT_BET):
+    prob = 0.5 + (point / 50)
+    return round(prob * bet - (1 - prob) * bet, 2)
 
-# Fetching data functions same as before...
 @st.cache_data(ttl=3600)
 def get_available_markets():
-    url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={ODDS_API_KEY}&regions={REGION}"
     try:
-        resp = requests.get(url)
+        resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={ODDS_API_KEY}&regions={REGION}")
         resp.raise_for_status()
         data = resp.json()
         if data:
-            first_game = data[0]
-            return [m["key"] for m in first_game["bookmakers"][0]["markets"]]
+            return [m["key"] for m in data[0]["bookmakers"][0]["markets"]]
         else:
             return ["spreads"]
     except:
@@ -46,46 +43,51 @@ def get_available_markets():
 
 @st.cache_data(ttl=3600)
 def get_upcoming_games(markets):
-    data = []
+    all_data = []
     for market in markets:
-        url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={ODDS_API_KEY}&regions={REGION}&markets={market}"
         try:
+            url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={ODDS_API_KEY}&regions={REGION}&markets={market}"
             resp = requests.get(url)
             resp.raise_for_status()
             games = resp.json()
         except:
             continue
+
         for g in games:
             try:
                 home_team = g['home_team']
                 away_team = g['away_team']
                 game_time = datetime.fromisoformat(g['commence_time'].replace("Z", "+00:00"))
-                week_number = game_time.isocalendar()[1]
+                week_num = game_time.isocalendar()[1]
                 bookmaker = g['bookmakers'][0]
                 market_data = bookmaker['markets'][0]
                 outcomes = market_data['outcomes']
+
                 if market == "moneyline" and len(outcomes) >= 2:
                     home_ml = outcomes[0]['price']
                     away_ml = outcomes[1]['price']
                     home_ev = get_moneyline_ev(home_ml, DEFAULT_BET)
                     away_ev = get_moneyline_ev(away_ml, DEFAULT_BET)
                 else:
-                    home_point = outcomes[0].get('point',0)
-                    away_point = outcomes[1].get('point',0)
+                    home_point = outcomes[0].get('point', 0)
+                    away_point = outcomes[1].get('point', 0)
                     home_ev = spread_to_ev(home_point, DEFAULT_BET)
                     away_ev = spread_to_ev(away_point, DEFAULT_BET)
-                data.append({
-                    "Week": week_number,
+
+                all_data.append({
+                    "Week": week_num,
                     "Date": game_time,
                     "Home Team": home_team,
                     "Away Team": away_team,
                     "Market": market,
                     "Home EV ($)": round(home_ev, 2),
-                    "Away EV ($)": round(away_ev, 2)
+                    "Away EV ($)": round(away_ev, 2),
                 })
             except:
                 continue
-    df = pd.DataFrame(data)
+    if not all_data:
+        return pd.DataFrame()  # empty DataFrame if no data
+    df = pd.DataFrame(all_data)
     df.sort_values(by=["Week", "Date"], inplace=True)
     return df
 
@@ -94,10 +96,10 @@ def calculate_best_bet(df, bet_amount):
     df["Best EV ($)"] = df[["Home EV ($)", "Away EV ($)"]].max(axis=1)
     return df
 
-# --- Streamlit UI ---
+# --- UI & Layout ---
 st.set_page_config(page_title="NFL +EV Bot", layout="wide", page_icon="🏈")
 
-# Custom CSS for a sleek dark UI
+# Custom CSS for a sleek, modern dark theme
 st.markdown(
     """
     <style>
@@ -113,18 +115,18 @@ st.markdown(
             margin-bottom: 10px;
             color: #00ffff;
         }
-        /* Sidebar styles */
+        /* Sidebar styling */
         .sidebar .sidebar-content {
             background-color: #1f1f2e;
             padding: 20px;
             border-radius: 12px;
         }
-        /* Filters and inputs */
+        /* Inputs styling */
         .stSlider, .stNumberInput {
             background-color: #2e2e3e;
             border-radius: 8px;
         }
-        /* Card style */
+        /* Cards styling */
         .game-card {
             background-color: #1f1f2e;
             border-radius: 12px;
@@ -188,7 +190,7 @@ st.markdown(
 # Title
 st.markdown("<h1>🏈 NFL +EV Bot – Modern Dashboard</h1>", unsafe_allow_html=True)
 
-# Sidebar filters
+# Filters sidebar
 st.sidebar.header("⚙️ Settings")
 ev_filter = st.sidebar.slider("Minimum EV ($)", -50.0, 100.0, 0.0, 5.0)
 bet_amount = st.sidebar.number_input("Bet Amount per Game ($)", value=DEFAULT_BET, step=10)
@@ -201,7 +203,7 @@ if games_df.empty:
     st.warning("No upcoming games found.")
     st.stop()
 
-# Calculate best bets & filter
+# Calculate best bets and filter
 games_df = calculate_best_bet(games_df, bet_amount)
 games_df = games_df[games_df["Best EV ($)"] >= ev_filter]
 
@@ -209,7 +211,7 @@ games_df = games_df[games_df["Best EV ($)"] >= ev_filter]
 weeks = sorted(games_df["Week"].unique())
 week_tabs = st.tabs([f"Week {w}" for w in weeks])
 
-# Display for each week
+# Show data in each week
 for i, week in enumerate(weeks):
     with week_tabs[i]:
         week_df = games_df[games_df["Week"] == week]
@@ -238,10 +240,11 @@ for i, week in enumerate(weeks):
                             """,
                             unsafe_allow_html=True
                         )
+                        # Invisible button to trigger modal
                         if st.button("", key=f"btn_{idx}_{week}_{market}"):
                             st.session_state["modal_open"] = idx
 
-# Show modal when a game is clicked
+# Modal for selected game
 if st.session_state.get("modal_open") is not None:
     idx = st.session_state["modal_open"]
     game = games_df.iloc[idx]
