@@ -24,7 +24,7 @@ def total_to_ev(total, bet_amount=100):
 
 @st.cache_data(ttl=3600)
 def get_available_markets():
-    """Get available markets dynamically to avoid 422 errors"""
+    """Detect available markets dynamically to avoid 422 errors"""
     url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={ODDS_API_KEY}&regions={REGION}"
     try:
         resp = requests.get(url)
@@ -89,38 +89,28 @@ def calculate_best_bet(df):
 
 # --- APP CONFIG ---
 st.set_page_config(page_title="NFL +EV Bot", layout="wide", page_icon="🏈")
-if "dark_mode" not in st.session_state: st.session_state.dark_mode = True
 
 # --- SIDEBAR ---
 st.sidebar.header("⚙️ Settings")
 ev_filter = st.sidebar.slider("Minimum EV ($)", -50.0, 100.0, 0.0,5.0)
-toggle_dark = st.sidebar.checkbox("🌙 Dark Mode", value=st.session_state.dark_mode)
 bet_amount = st.sidebar.number_input("Bet Amount per Game ($)", value=DEFAULT_BET, step=10)
-if toggle_dark != st.session_state.dark_mode: st.session_state.dark_mode = toggle_dark
 
 # --- STYLING ---
-bg_img = "https://fireart.studio/wp-content/uploads/2022/05/lostmine.jpg"
-if st.session_state.dark_mode:
-    card_bg = "rgba(30,30,30,0.85)"
-    text_color = "#f5e6c8"
-    accent_color = "#d4af37"
-else:
-    card_bg = "#ffffff"
-    text_color = "#1a1a1a"
-    accent_color = "#0056d6"
-
 st.markdown(f"""
 <style>
 body {{
-    background: url('{bg_img}') no-repeat center center fixed;
+    background: url('https://fireart.studio/wp-content/uploads/2022/05/lostmine.jpg') no-repeat center center fixed;
     background-size: cover;
-    color: {text_color};
+    color: #f5e6c8;
     font-family: 'Cinzel', serif;
 }}
-h1,h2,h3 {{color:{accent_color}; text-shadow: 2px 2px 6px #000000;}}
+h1,h2,h3 {{
+    color:#a57cfa;
+    text-shadow: 2px 2px 6px #000000;
+}}
 .card {{
-    background: {card_bg};
-    border: 2px solid #a57c32;
+    background: rgba(30,30,30,0.85);
+    border: 2px solid #7a3ff2;
     border-radius: 16px;
     padding: 20px;
     margin-bottom: 20px;
@@ -132,23 +122,23 @@ h1,h2,h3 {{color:{accent_color}; text-shadow: 2px 2px 6px #000000;}}
     box-shadow: 0 16px 36px rgba(0,0,0,0.9);
 }}
 .glow-badge {{
-    background: linear-gradient(135deg, #d4af37, #ffd700);
-    color: #1b1b1b;
+    background: linear-gradient(135deg, #a57cfa, #c099ff);
+    color: #ffffff;
     padding: 6px 10px;
     border-radius: 10px;
     font-size: 12px;
-    box-shadow: 0 0 10px #ffd700, 0 0 20px #d4af37, 0 0 30px #ffd700;
+    box-shadow: 0 0 10px #c099ff, 0 0 20px #a57cfa, 0 0 30px #c099ff;
     animation: glow 1.5s infinite alternate;
 }}
 @keyframes glow {{
-    0% {{ box-shadow: 0 0 5px #ffd700, 0 0 10px #d4af37, 0 0 15px #ffd700; }}
-    50% {{ box-shadow: 0 0 15px #ffd700, 0 0 25px #d4af37, 0 0 35px #ffd700; }}
-    100% {{ box-shadow: 0 0 5px #ffd700, 0 0 10px #d4af37, 0 0 15px #ffd700; }}
+    0% {{ box-shadow: 0 0 5px #c099ff, 0 0 10px #a57cfa, 0 0 15px #c099ff; }}
+    50% {{ box-shadow: 0 0 15px #c099ff, 0 0 25px #a57cfa, 0 0 35px #c099ff; }}
+    100% {{ box-shadow: 0 0 5px #c099ff, 0 0 10px #a57cfa, 0 0 15px #c099ff; }}
 }}
 .particle {{
     position: absolute;
     bottom: 0;
-    background: gold;
+    background: #a57cfa;
     border-radius: 50%;
     opacity: 0.7;
     animation-name: float;
@@ -163,7 +153,7 @@ h1,h2,h3 {{color:{accent_color}; text-shadow: 2px 2px 6px #000000;}}
 </style>
 """, unsafe_allow_html=True)
 
-# --- Floating gold particles ---
+# --- Floating purple particles ---
 particle_html = ""
 num_particles = 20
 for i in range(num_particles):
