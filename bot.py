@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
-import plotly.graph_objects as go
 
 # -------------------------------
 # PAGE CONFIG
@@ -78,7 +77,6 @@ def fetch_games():
 st.markdown("""
 <style>
 body {background: #0e1117; color: #f0f0f0; font-family: 'Helvetica', sans-serif;}
-
 .game-card {
     background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(10px);
@@ -96,14 +94,15 @@ body {background: #0e1117; color: #f0f0f0; font-family: 'Helvetica', sans-serif;
 .ev-positive {color: #06d6a0; font-weight: bold;}
 .ev-negative {color: #ef476f; font-weight: bold;}
 .game-date {color: #aaa; font-size: 0.9rem; margin-bottom: 0.5rem;}
+.ev-bar {height: 15px; border-radius: 10px; margin-top: 2px; margin-bottom: 5px;}
 </style>
 """, unsafe_allow_html=True)
 
 # -------------------------------
 # MAIN UI
 # -------------------------------
-st.title("🏈 NFL +EV Glassy Dashboard with Sparklines")
-st.markdown("Interactive glassy cards showing Home vs Away EV with mini sparkline bars for quick visual comparison.")
+st.title("🏈 NFL +EV Glassy Dashboard")
+st.markdown("Interactive glassy cards showing Home vs Away EV with mini native bars.")
 
 df = fetch_games()
 if df.empty:
@@ -137,35 +136,18 @@ else:
     elif sort_option == "Date":
         filtered_df = filtered_df.sort_values(by="Date")
 
-    # Display glassy cards with mini sparklines
+    # Display glassy cards with native bars
     for idx, row in filtered_df.iterrows():
         st.markdown(f"""
         <div class="game-card">
             <div class="game-date">{row['Date']} | Week {row['Week']}</div>
             <div class="team">{row['Away Team']} <span class="{'ev-positive' if row['Away EV']>0 else 'ev-negative'}">${row['Away EV']}</span></div>
+            <div style="background: {'#06d6a0' if row['Away EV']>0 else '#ef476f'}; width: {min(abs(row['Away EV']),100)}%;"
+                 class="ev-bar"></div>
             <div class="team">{row['Home Team']} <span class="{'ev-positive' if row['Home EV']>0 else 'ev-negative'}">${row['Home EV']}</span></div>
+            <div style="background: {'#06d6a0' if row['Home EV']>0 else '#ef476f'}; width: {min(abs(row['Home EV']),100)}%;"
+                 class="ev-bar"></div>
         </div>
         """, unsafe_allow_html=True)
-
-        # Mini sparkline
-        spark = go.Figure(go.Bar(
-            x=["Away", "Home"],
-            y=[row["Away EV"], row["Home EV"]],
-            marker_color=["#06d6a0" if row["Away EV"]>0 else "#ef476f",
-                          "#06d6a0" if row["Home EV"]>0 else "#ef476f"],
-            text=[row["Away EV"], row["Home EV"]],
-            textposition="auto"
-        ))
-        spark.update_layout(
-            height=80,
-            margin=dict(l=0,r=0,t=0,b=0),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            xaxis_showgrid=False,
-            yaxis_showgrid=False,
-            xaxis_tickfont_color="#f0f0f0",
-            yaxis_tickfont_color="#f0f0f0",
-        )
-        st.plotly_chart(spark, use_container_width=True, config={'displayModeBar': False})
 
 st.caption("Data provided by [The Odds API](https://the-odds-api.com). Built with ❤️ using Streamlit.")
