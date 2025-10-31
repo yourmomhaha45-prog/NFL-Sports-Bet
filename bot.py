@@ -3,13 +3,13 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-# Constants
+# --- Constants ---
 SPORT = "americanfootball_nfl"
 REGION = "us"
 DEFAULT_BET = 100
-ODDS_API_KEY = "558d1e3bfadf5243c8292da72801012f"
+API_KEY = "YOUR_API_KEY"  # Replace with your actual API key
 
-# Helper functions
+# --- Utility functions ---
 def moneyline_to_prob(ml):
     if ml > 0:
         return 100 / (ml + 100)
@@ -31,25 +31,23 @@ def spread_to_ev(point, bet=DEFAULT_BET):
 def moneyline_to_multiplier(ml):
     return ml / 100 + 1 if ml > 0 else 100 / abs(ml) + 1
 
+# --- Data fetching with robustness ---
 @st.cache_data(ttl=3600)
 def get_available_markets():
     try:
-        resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={ODDS_API_KEY}&regions={REGION}")
+        resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={API_KEY}&regions={REGION}")
         resp.raise_for_status()
         data = resp.json()
-        if data:
-            return [m["key"] for m in data[0]["bookmakers"][0]["markets"]]
-        else:
-            return ["spreads"]
+        return [m["key"] for m in data[0]["bookmakers"][0]["markets"]]
     except:
         return ["spreads"]
 
 @st.cache_data(ttl=3600)
 def get_upcoming_games(markets):
-    all_data = []
+    all_games = []
     for market in markets:
         try:
-            url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={ODDS_API_KEY}&regions={REGION}&markets={market}"
+            url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={API_KEY}&regions={REGION}&markets={market}"
             resp = requests.get(url)
             resp.raise_for_status()
             games = resp.json()
@@ -60,8 +58,8 @@ def get_upcoming_games(markets):
             try:
                 home_team = g['home_team']
                 away_team = g['away_team']
-                game_time = datetime.fromisoformat(g['commence_time'].replace("Z", "+00:00"))
-                week_num = game_time.isocalendar()[1]
+                date_obj = datetime.fromisoformat(g['commence_time'].replace("Z", "+00:00"))
+                week_num = date_obj.isocalendar()[1]
                 bookmaker = g['bookmakers'][0]
                 market_data = bookmaker['markets'][0]
                 outcomes = market_data['outcomes']
@@ -75,65 +73,73 @@ def get_upcoming_games(markets):
                     away_point = outcomes[1].get('point', 0)
                     home_ev = spread_to_ev(home_point, DEFAULT_BET)
                     away_ev = spread_to_ev(away_point, DEFAULT_BET)
-                all_data.append({
+                all_games.append({
                     "Week": week_num,
-                    "Date": game_time,
+                    "Date": date_obj,
                     "Home Team": home_team,
                     "Away Team": away_team,
                     "Market": market,
-                    "Home EV ($)": round(home_ev, 2),
-                    "Away EV ($)": round(away_ev, 2),
+                    "Home EV": round(home_ev, 2),
+                    "Away EV": round(away_ev, 2)
                 })
             except:
                 continue
-    if not all_data:
+    if not all_games:
         return pd.DataFrame()
-    df = pd.DataFrame(all_data)
+    df = pd.DataFrame(all_games)
     df.sort_values(by=["Week", "Date"], inplace=True)
     return df
 
-def calculate_best_bet(df, bet):
-    df["Best Bet"] = df.apply(lambda row: row["Home Team"] if row["Home EV ($)"] > row["Away EV ($)"] else row["Away Team"], axis=1)
-    df["Best EV ($)"] = df[["Home EV ($)", "Away EV ($)"]].max(axis=1)
+def compute_bets(df, bet_amount):
+    df['Best Bet'] = df.apply(
+        lambda row: row['Home Team'] if row['Home EV'] > row['Away EV'] else row['Away Team'], axis=1)
+    df['Best EV'] = df[['Home EV', 'Away EV']].max(axis=1)
     return df
 
-# --- UI & Styling ---
+# --- Custom CSS for futuristic UI ---
+st.set_page_config(
+    layout="wide",
+    page_title="Futuristic NFL +EV Dashboard",
+    page_icon="🏈"
+)
 
-st.set_page_config(layout="wide", page_title="NFL +EV Modern Dashboard", page_icon="🏈")
-
-# Custom CSS for a futuristic look
 st.markdown(
     """
     <style>
+        /* Background gradient with glow */
         body {
-            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
+            font-family: 'Orbitron', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             color: #fff;
             margin: 0;
             padding: 0;
         }
+        /* Title with glow effect */
         h1 {
-            font-family: 'Orbitron', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-family: 'Orbitron', sans-serif;
             font-size: 4rem;
             text-align: center;
             margin-top: 30px;
+            margin-bottom: 20px;
             color: #00ffff;
             text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff;
         }
         /* Sidebar style */
         .sidebar .sidebar-content {
-            background: #111;
+            background: rgba(20, 20, 20, 0.8);
             padding: 20px;
             border-radius: 20px;
-            box-shadow: 0 0 20px #000;
+            box-shadow: 0 0 20px #00ffff55;
         }
-        /* Filters & control inputs */
+        /* Inputs style */
         .stSlider, .stNumberInput {
             background: #222;
             border-radius: 10px;
+            border: none;
+            color: #fff;
         }
-        /* Cards grid layout */
-        .cards-container {
+        /* Cards container grid */
+        .cards-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 20px;
@@ -141,129 +147,142 @@ st.markdown(
         }
         /* Individual card style */
         .card {
-            background: #1f1f2e;
+            background: rgba(255,255,255,0.05);
             border-radius: 20px;
             padding: 20px;
-            box-shadow: 0 0 30px rgba(0,255,255,0.2);
-            transition: all 0.3s ease;
+            box-shadow: inset 0 0 10px #00ffff33, 0 0 20px #00ffff33;
             cursor: pointer;
-            backdrop-filter: blur(10px);
+            transition: all 0.4s ease;
+            backdrop-filter: blur(8px);
         }
         .card:hover {
-            box-shadow: 0 0 50px rgba(0,255,255,0.4);
+            box-shadow: inset 0 0 15px #00ffff66, 0 0 30px #00ffff66;
             transform: translateY(-4px);
         }
-        /* Badges & labels */
-        .badge {
+        /* Label styles */
+        .label {
             display: inline-block;
-            background-color: #00ffff;
-            color: #000;
             padding: 4px 12px;
             border-radius: 10px;
+            background: linear-gradient(45deg, #00ffff, #ff00ff);
+            background-size: 200% 200%;
+            animation: glow 2s linear infinite;
             font-weight: 600;
             font-size: 0.75rem;
             margin-top: 10px;
-            margin-bottom: 10px;
         }
-        /* Modal overlay for details */
+        @keyframes glow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        /* Modal overlay style */
         .modal {
             position: fixed;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
+            background: rgba(15, 15, 15, 0.9);
             display: flex;
-            align-items: center;
             justify-content: center;
-            z-index: 10000;
+            align-items: center;
+            z-index: 9999;
             opacity: 1;
             transition: opacity 0.3s ease;
         }
-        /* Modal content box */
+        /* Modal content style */
         .modal-box {
-            background: #222;
+            background: rgba(20,20,20,0.95);
             padding: 30px;
             border-radius: 25px;
             max-width: 600px;
             width: 90%;
-            box-shadow: 0 0 40px rgba(0,255,255,0.3);
-            position: relative;
+            box-shadow: 0 0 40px #00ffff66;
             color: #fff;
+            position: relative;
+            backdrop-filter: blur(10px);
         }
-        /* Close button */
+        /* Close button style */
         .close-btn {
             position: absolute;
-            top: 15px;
-            right: 20px;
-            background: #00ffff;
+            top: 10px;
+            right: 15px;
+            background: linear-gradient(135deg, #ff00ff, #00ffff);
             border: none;
-            border-radius: 8px;
             padding: 8px 14px;
-            font-weight: bold;
+            border-radius: 10px;
             cursor: pointer;
-            transition: background 0.3s;
+            font-weight: bold;
+            box-shadow: 0 0 10px #ff00ff55, 0 0 20px #00ffff55;
+            transition: all 0.3s ease;
         }
         .close-btn:hover {
-            background: #0ff;
+            box-shadow: 0 0 20px #ff00ff88, 0 0 30px #00ffff88;
+            transform: translateY(-2px);
         }
     </style>
     """, unsafe_allow_html=True
 )
 
-# HEADER
-st.markdown("<h1>🏈 NFL +EV Dashboard</h1>", unsafe_allow_html=True)
+# --- HEADER ---
+st.markdown("<h1>🏈 FUTURISTIC NFL +EV DASHBOARD</h1>", unsafe_allow_html=True)
 
-# SIDEBAR filters
-st.sidebar.header("Filters & Settings")
+# --- SIDEBAR ---
+st.sidebar.header("Settings & Filters")
 ev_threshold = st.sidebar.slider("Minimum EV ($)", -50, 100, 0, 5)
 bet_amount = st.sidebar.number_input("Bet Amount ($)", value=DEFAULT_BET, step=10)
 
-# Get data
+# --- Fetch & Process Data ---
 markets = get_available_markets()
-df = get_upcoming_games(markets)
+df_games = get_upcoming_games(markets)
 
-if df.empty:
-    st.warning("No upcoming games data.")
+if df_games.empty:
+    st.warning("No upcoming game data available.")
     st.stop()
 
-# Compute best bets
-df = calculate_best_bet(df, bet_amount)
-df = df[df["Best EV ($)"] >= ev_threshold]
+df_games = compute_bets(df_games, bet_amount)
+df_games = df_games[df_games["Best EV"] >= ev_threshold]
 
-# Display in a grid of cards
-st.markdown(f"<h2 style='text-align:center;'>Upcoming Matches & Bets</h2>", unsafe_allow_html=True)
+# --- Display Cards ---
+st.markdown("<h2 style='text-align:center; margin-top:30px;'>Upcoming Matches & Bets</h2>", unsafe_allow_html=True)
 
-# Container for cards
-container = st.container()
-with container:
-    # Use HTML + CSS grid for modern look
-    st.markdown('<div class="cards-container">', unsafe_allow_html=True)
-    for idx, row in df.iterrows():
-        html = f"""
-        <div class="card" onclick="window.parent.postMessage({{'type':'show_detail','index':{idx}}},'*')">
-            <h3 style='margin-bottom:10px;'>{row['Away Team']} @ {row['Home Team']}</h3>
-            <p style='opacity:0.7;'>{row['Date'].strftime("%b %d, %H:%M")}</p>
-            <div class='badge'>Best Bet: {row['Best Bet']}</div>
-            <p style='margin-top:10px;'>EV: <b>${row['Best EV ($)']}</b></p>
+grid_html = '<div class="cards-grid">'
+for idx, row in df_games.iterrows():
+    html = f"""
+    <div class="card" onclick="window.parent.postMessage({{'type':'show_detail','index':{idx}}},'*')">
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin:0;">{row['Away Team']} @ {row['Home Team']}</h3>
+            <div class="label">{row['Market'].replace('_', ' ').title()}</div>
         </div>
-        """
-        st.markdown(html, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+        <p style="opacity:0.7; margin-top:8px;">{row['Date'].strftime('%b %d, %H:%M')}</p>
+        <div style="margin-top:10px;">
+            <div style="margin-bottom:8px;">
+                <strong>Best Bet:</strong> {row['Best Bet']}
+            </div>
+            <div class="label" style="background: linear-gradient(45deg, #00ffff, #ff00ff); font-size:0.8rem;">
+                EV: ${row['Best EV']}
+            </div>
+        </div>
+    </div>
+    """
+    grid_html += html
+grid_html += '</div>'
+st.markdown(grid_html, unsafe_allow_html=True)
 
-# Handle modal popup via custom JavaScript
+# --- Modal for details ---
 if st.session_state.get("show_detail_idx") is not None:
     idx = st.session_state["show_detail_idx"]
-    game = df.iloc[idx]
+    game = df_games.iloc[idx]
     st.markdown(
         f"""
-        <div class="modal" style="display:flex;">
+        <div class="modal">
             <div class="modal-box">
                 <button class="close-btn" onclick="window.parent.postMessage({{'type':'close_modal'}},'*')">X</button>
-                <h2>{game['Away Team']} @ {game['Home Team']}</h2>
-                <p><b>Date:</b> {game['Date'].strftime("%b %d, %H:%M")}</p>
-                <p><b>Market:</b> {game['Market']}</p>
-                <p><b>Home EV:</b> ${game['Home EV ($)']}</p>
-                <p><b>Away EV:</b> ${game['Away EV ($)']}</p>
-                <div class='badge'>Best Bet: {game['Best Bet']}</div>
+                <h2 style="text-align:center;">{game['Away Team']} @ {game['Home Team']}</h2>
+                <p><strong>Date:</strong> {game['Date'].strftime('%b %d, %H:%M')}</p>
+                <p><strong>Market:</strong> {game['Market'].replace('_', ' ').title()}</p>
+                <p><strong>Home EV:</strong> ${game['Home EV']}</p>
+                <p><strong>Away EV:</strong> ${game['Away EV']}</p>
+                <div class="label">Best Bet: {game['Best Bet']}</div>
             </div>
         </div>
         """, unsafe_allow_html=True
