@@ -3,10 +3,10 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-# --- Your API key ---
-API_KEY = "558d1e3bfadf5243c8292da72801012f"  # <-- Replace with your API key
+# Your API key
+API_KEY = "558d1e3bfadf5243c8292da72801012f"
 
-# --- Utility functions ---
+# Utility functions
 def moneyline_to_prob(ml):
     if ml > 0:
         return 100 / (ml + 100)
@@ -28,91 +28,75 @@ def spread_to_ev(point, bet=100):
 def moneyline_to_multiplier(ml):
     return ml / 100 + 1 if ml > 0 else 100 / abs(ml) + 1
 
-# --- Fetch data with debugging ---
+# Fetch data with debug logs
 @st.cache_data(ttl=3600)
-def get_markets():
+def fetch_games():
+    url = f"https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey={API_KEY}&regions=us&markets=spreads"
     try:
-        url = f"https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey={API_KEY}&regions=us"
-        resp = requests.get(url)
-        resp.raise_for_status()
-        data = resp.json()
-        st.write("Available markets from API:", data)  # Debug
-        if data:
-            return [m["key"] for m in data[0]["bookmakers"][0]["markets"]]
-        else:
-            return ["spreads"]
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        st.write("API response data:", data)  # Debug: show raw data
+        games_list = []
+
+        for g in data:
+            try:
+                home = g['home_team']
+                away = g['away_team']
+                dt = datetime.fromisoformat(g['commence_time'].replace("Z", "+00:00"))
+                week = dt.isocalendar()[1]
+                outcomes = g['bookmakers'][0]['markets'][0]['outcomes']
+                if len(outcomes) >= 2:
+                    if 'price' in outcomes[0]:
+                        home_ml = outcomes[0]['price']
+                        away_ml = outcomes[1]['price']
+                        home_ev = get_moneyline_ev(home_ml)
+                        away_ev = get_moneyline_ev(away_ml)
+                    else:
+                        home_point = outcomes[0].get('point', 0)
+                        away_point = outcomes[1].get('point', 0)
+                        home_ev = spread_to_ev(home_point)
+                        away_ev = spread_to_ev(away_point)
+                    games_list.append({
+                        "Week": week,
+                        "Date": dt,
+                        "Home Team": home,
+                        "Away Team": away,
+                        "Market": "spreads",
+                        "Home EV": home_ev,
+                        "Away EV": away_ev
+                    })
+            except Exception as e:
+                st.write("Error processing a game:", e)
+        if not games_list:
+            st.write("No games found.")
+        df = pd.DataFrame(games_list).sort_values(by=["Week", "Date"])
+        return df
     except Exception as e:
-        st.write("Error fetching markets:", e)
-        return ["spreads"]
-
-@st.cache_data(ttl=3600)
-def get_games():
-    try:
-        url = f"https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey={API_KEY}&regions=us&markets=spreads"
-        resp = requests.get(url)
-        resp.raise_for_status()
-        games = resp.json()
-        st.write("API response:", games)  # Debug
-    except:
+        st.write("Error fetching data from API:", e)
         return pd.DataFrame()
 
-    all_games = []
-    for g in games:
-        try:
-            home = g['home_team']
-            away = g['away_team']
-            dt = datetime.fromisoformat(g['commence_time'].replace("Z", "+00:00"))
-            week = dt.isocalendar()[1]
-            outcomes = g['bookmakers'][0]['markets'][0]['outcomes']
-            if len(outcomes) >= 2:
-                if 'price' in outcomes[0]:
-                    home_ml = outcomes[0]['price']
-                    away_ml = outcomes[1]['price']
-                    home_ev = get_moneyline_ev(home_ml)
-                    away_ev = get_moneyline_ev(away_ml)
-                else:
-                    home_point = outcomes[0].get('point', 0)
-                    away_point = outcomes[1].get('point', 0)
-                    home_ev = spread_to_ev(home_point)
-                    away_ev = spread_to_ev(away_point)
-                all_games.append({
-                    "Week": week,
-                    "Date": dt,
-                    "Home Team": home,
-                    "Away Team": away,
-                    "Market": "spreads",
-                    "Home EV": home_ev,
-                    "Away EV": away_ev
-                })
-        except:
-            continue
-    if not all_games:
-        return pd.DataFrame()
-    df = pd.DataFrame(all_games).sort_values(by=["Week", "Date"])
-    return df
-
-# --- Main ---
+# --- UI Setup ---
 st.set_page_config(
     layout="wide",
-    page_title="Futuristic NFL +EV Dashboard",
+    page_title="NFL +EV Dashboard",
     page_icon="🏈"
 )
 
-# --- Custom CSS for sleek UI ---
+# Custom CSS for sleek futuristic look
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
 
 body {
-    margin: 0;
-    padding: 0;
-    background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
+    background: linear-gradient(135deg, #000000, #1a1a1a);
     font-family: 'Orbitron', sans-serif;
     color: #fff;
+    margin: 0;
 }
 h1 {
     font-family: 'Orbitron', sans-serif;
-    font-size: 4rem;
+    font-size: 3.5rem;
     text-align: center;
     margin-top: 20px;
     margin-bottom: 30px;
@@ -120,7 +104,7 @@ h1 {
     text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff;
 }
 .sidebar .sidebar-content {
-    background: rgba(20, 20, 20, 0.8);
+    background: rgba(20,20,20,0.8);
     padding: 20px;
     border-radius: 20px;
     box-shadow: 0 0 20px #00ffff44;
@@ -208,7 +192,7 @@ h1 {
 </style>
 """, unsafe_allow_html=True)
 
-# --- Main header ---
+# --- Title ---
 st.markdown("<h1>🏈 FUTURISTIC NFL +EV DASHBOARD</h1>", unsafe_allow_html=True)
 
 # --- Sidebar filters ---
@@ -217,12 +201,10 @@ ev_threshold = st.sidebar.slider("Minimum EV ($)", -50, 100, 0, 5)
 bet_amount = st.sidebar.number_input("Bet Amount ($)", value=100, step=10)
 
 # --- Fetch data ---
-markets = get_markets()
-df = get_games()
+df = fetch_games()
 
-# Check if data available
 if df.empty:
-    st.warning("No data available. Make sure your API key is correct and NFL data is live.")
+    st.warning("No data available. Make sure your API key is correct and NFL games are scheduled.")
     st.stop()
 
 # --- Compute best bets ---
@@ -231,12 +213,12 @@ df['Best Bet'] = df.apply(
 df['Best EV'] = df[['Home EV', 'Away EV']].max(axis=1)
 df = df[df['Best EV'] >= ev_threshold]
 
-# --- Display cards ---
-st.markdown("<h2 style='text-align:center;'>Upcoming Matches & Bets</h2>", unsafe_allow_html=True)
+# --- Show cards ---
+st.markdown("<h2 style='text-align:center;'>Upcoming Games & Bets</h2>", unsafe_allow_html=True)
 
-html = '<div class="cards-container">'
+html_cards = '<div class="cards-container">'
 for idx, row in df.iterrows():
-    html += f"""
+    html_cards += f"""
     <div class='card' onclick="window.parent.postMessage({{'type':'show_detail','index':{idx}}},'*')">
         <h3>{row['Away Team']} @ {row['Home Team']}</h3>
         <p style='opacity:0.7;'>{row['Date'].strftime('%b %d, %H:%M')}</p>
@@ -244,10 +226,10 @@ for idx, row in df.iterrows():
         <p><b>Bet:</b> {row['Best Bet']} | EV: ${row['Best EV']}</p>
     </div>
     """
-html += '</div>'
-st.markdown(html, unsafe_allow_html=True)
+html_cards += '</div>'
+st.markdown(html_cards, unsafe_allow_html=True)
 
-# --- Modal popup ---
+# --- Modal popup to show details ---
 if st.session_state.get("show_detail_idx") is not None:
     idx = st.session_state["show_detail_idx"]
     game = df.iloc[idx]
