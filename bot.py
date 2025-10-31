@@ -3,13 +3,13 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-# --- CONFIG ---
+# ---------------- CONFIG ----------------
 SPORT = "americanfootball_nfl"
 REGION = "us"
 DEFAULT_BET = 100
-ODDS_API_KEY = "558d1e3bfadf5243c8292da72801012f"  # Direct in code for local testing
+ODDS_API_KEY = "558d1e3bfadf5243c8292da72801012f"  # Replace with your key
 
-# --- FUNCTIONS ---
+# ---------------- FUNCTIONS ----------------
 def moneyline_to_multiplier(ml):
     return ml / 100 + 1 if ml > 0 else 100 / abs(ml) + 1
 
@@ -17,9 +17,6 @@ def spread_to_ev(point, bet_amount=100):
     prob = 0.5 + (point / 50)
     ev = prob * bet_amount - (1 - prob) * bet_amount
     return round(ev, 2)
-
-def total_to_ev(total, bet_amount=100):
-    return round(0.5 * bet_amount - 0.5 * bet_amount, 2)
 
 @st.cache_data(ttl=3600)
 def get_available_markets():
@@ -55,14 +52,11 @@ def get_upcoming_games(markets):
                     away_ml = g['bookmakers'][0]['markets'][0]['outcomes'][1]['price']
                     home_ev = (1/moneyline_to_multiplier(home_ml))*DEFAULT_BET*(moneyline_to_multiplier(home_ml)-1) - (1-(1/moneyline_to_multiplier(home_ml)))*DEFAULT_BET
                     away_ev = (1/moneyline_to_multiplier(away_ml))*DEFAULT_BET*(moneyline_to_multiplier(away_ml)-1) - (1-(1/moneyline_to_multiplier(away_ml)))*DEFAULT_BET
-                elif market == "spreads":
+                else:
                     home_point = g['bookmakers'][0]['markets'][0]['outcomes'][0].get('point',0)
                     away_point = g['bookmakers'][0]['markets'][0]['outcomes'][1].get('point',0)
                     home_ev = spread_to_ev(home_point, DEFAULT_BET)
                     away_ev = spread_to_ev(away_point, DEFAULT_BET)
-                else:
-                    home_ev = total_to_ev(0, DEFAULT_BET)
-                    away_ev = total_to_ev(0, DEFAULT_BET)
 
                 data.append({
                     "Week": week_number,
@@ -84,52 +78,60 @@ def calculate_best_bet(df):
     df["Best EV ($)"] = df[["Home EV ($)","Away EV ($)"]].max(axis=1)
     return df
 
-# --- APP CONFIG ---
+# ---------------- APP CONFIG ----------------
 st.set_page_config(page_title="NFL +EV Bot", layout="wide", page_icon="🏈")
+if "modal_open" not in st.session_state:
+    st.session_state["modal_open"] = None
 
-# --- SIDEBAR ---
+# ---------------- SIDEBAR ----------------
 st.sidebar.header("⚙️ Settings")
 ev_filter = st.sidebar.slider("Minimum EV ($)", -50.0, 100.0, 0.0,5.0)
 bet_amount = st.sidebar.number_input("Bet Amount per Game ($)", value=DEFAULT_BET, step=10)
 
-# --- MODERN DARK BACKGROUND + CARDS + SIDEBAR + FADE CSS ---
+# ---------------- MODERN CSS ----------------
 st.markdown("""
 <style>
 body {
     background-color: #12121a;
+    background-image: url('https://www.transparenttextures.com/patterns/asfalt-dark.png');
     color: #e0e0e0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin:0; padding:0;
-    background-image: linear-gradient(135deg,#1b1b2f,#12121a),
-                      url('https://www.transparenttextures.com/patterns/asfalt-dark.png');
-    background-repeat: repeat;
-    background-size: auto;
 }
-h1,h2,h3 { color:#b67aff; margin-bottom:0.5rem; letter-spacing:0.5px; text-shadow: 0 0 8px rgba(182,122,255,0.5); }
-.card { background: linear-gradient(145deg,#1f1f2a,#212130); border-radius:16px; padding:20px; margin:12px 0; box-shadow:0 4px 16px rgba(0,0,0,0.6); transition: transform 0.3s ease, box-shadow 0.3s ease; position:relative; overflow:hidden; }
-.card::before { content:""; position:absolute; top:-50%; left:-50%; width:200%; height:200%; background:linear-gradient(45deg, rgba(127,90,240,0.15), rgba(182,122,255,0.15)); opacity:0; transition: opacity 0.5s ease; z-index:0; }
-.card:hover { transform: translateY(-6px) scale(1.02); box-shadow:0 8px 32px rgba(127,90,240,0.6); }
-.card:hover::before { opacity:1; }
-.card * { position:relative; z-index:1; }
-.glow-badge { background: linear-gradient(135deg,#7f5af0,#b67aff); color:white; padding:4px 10px; border-radius:10px; font-size:0.85rem; text-transform:uppercase; box-shadow:0 0 12px rgba(182,122,255,0.6),0 0 24px rgba(127,90,240,0.4); animation:glow 1.8s infinite alternate; }
-@keyframes glow { from { box-shadow:0 0 6px rgba(182,122,255,0.4),0 0 18px rgba(127,90,240,0.2); } to { box-shadow:0 0 18px rgba(182,122,255,0.8),0 0 36px rgba(127,90,240,0.6); } }
-.card h4 { margin:0; font-weight:600; font-size:1.1rem; } .card p { margin:4px 0; font-size:0.9rem; color:#ccc; }
-[data-testid="stSidebar"] > div:first-child { background: linear-gradient(145deg,#1f1f2a,#212130); backdrop-filter: blur(8px); border-radius:16px; padding:20px; box-shadow:0 4px 16px rgba(0,0,0,0.6); color:#e0e0e0; }
-.stSidebar h2, .stSidebar h3, .stSidebar h4 { color: #b67aff; text-shadow: 0 0 6px rgba(182,122,255,0.5); }
-.stSlider, .stNumberInput>div { background: linear-gradient(145deg,#1f1f2a,#212130); border-radius: 12px; color:#e0e0e0; }
+.card {
+    background: linear-gradient(145deg,#1f1f2a,#212130);
+    border-radius:16px; padding:20px; margin:12px 0;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    cursor:pointer;
+}
+.card:hover { transform: translateY(-6px) scale(1.02); box-shadow: 0 8px 32px rgba(127,90,240,0.6); }
+.glow-badge {
+    background: linear-gradient(135deg,#7f5af0,#b67aff);
+    color:white; padding:4px 10px; border-radius:10px; font-size:0.85rem;
+    box-shadow:0 0 12px rgba(182,122,255,0.6),0 0 24px rgba(127,90,240,0.4);
+    animation:glow 1.8s infinite alternate;
+}
+@keyframes glow { from {box-shadow:0 0 6px rgba(182,122,255,0.4),0 0 18px rgba(127,90,240,0.2);} 
+to {box-shadow:0 0 18px rgba(182,122,255,0.8),0 0 36px rgba(127,90,240,0.6);} }
 .fade-in { opacity:0; transform: translateY(10px); animation: fadeInUp 0.6s forwards; }
 @keyframes fadeInUp { to { opacity:1; transform:translateY(0); } }
-details summary { cursor:pointer; font-weight:600; color:#b67aff; text-shadow: 0 0 8px rgba(182,122,255,0.5); font-size:1.1rem; }
-details { border-radius:16px; padding:16px; margin:8px 0; background: linear-gradient(145deg,#1f1f2a,#212130); box-shadow:0 4px 16px rgba(0,0,0,0.6); }
-details p { margin:4px 0; color:#ccc; }
+.modal-overlay {
+    position: fixed; top:0; left:0; width:100%; height:100%;
+    background: rgba(0,0,0,0.8); z-index:9999; display:flex; justify-content:center; align-items:center;
+}
+.modal-card {
+    background: linear-gradient(145deg,#1f1f2a,#212130); border-radius:16px; padding:30px; max-width:600px; width:90%;
+    box-shadow:0 8px 32px rgba(127,90,240,0.8); color:#e0e0e0;
+}
+.close-btn { background:#b67aff; border:none; color:white; padding:6px 12px; border-radius:8px; cursor:pointer; margin-top:12px;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- HEADER ---
-st.markdown("<h1 style='text-align:center;'>🏈 NFL +EV Bot – Cinematic Modern</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center; opacity:0.8;'>Weekly EV, Moneyline, Spread & Totals bets</p>", unsafe_allow_html=True)
+# ---------------- HEADER ----------------
+st.markdown("<h1 style='text-align:center;'>🏈 NFL +EV Bot – Modern Clean</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center; opacity:0.8;'>Weekly EV, Moneyline & Spread Bets</p>", unsafe_allow_html=True)
 
-# --- DATA ---
+# ---------------- DATA ----------------
 available_markets = get_available_markets()
 games_df = get_upcoming_games(available_markets)
 if games_df.empty:
@@ -140,7 +142,7 @@ games_df = calculate_best_bet(games_df)
 games_df = games_df[games_df["Best EV ($)"]>=ev_filter]
 weeks = sorted(games_df["Week"].unique())
 
-# --- WEEK & MARKET TABS WITH CARDS/EXPANDERS ---
+# ---------------- WEEK & MARKET TABS ----------------
 week_tabs = st.tabs([f"Week {w}" for w in weeks])
 for i, week in enumerate(weeks):
     with week_tabs[i]:
@@ -154,21 +156,42 @@ for i, week in enumerate(weeks):
                 num_bets = market_df.shape[0]
                 st.markdown(f"<p style='text-align:center; font-weight:600;'>Simulated Bets: {num_bets} | Total Expected Profit: ${total_ev}</p>", unsafe_allow_html=True)
 
-                # --- CARD GRID WITH CLICKABLE EXPANDERS ---
+                # ---------------- CARD GRID ----------------
                 cols = st.columns(3)
                 c_idx = 0
                 for idx, game in market_df.iterrows():
                     with cols[c_idx]:
+                        if st.button(f"{game['Away Team']} @ {game['Home Team']} - Best Bet: {game['Best Bet']}", key=f"{week}_{market}_{idx}"):
+                            st.session_state["modal_open"] = idx
+                    # Display card style
                         st.markdown(f"""
-                        <div class="fade-in">
-                            <details>
-                                <summary>{game['Away Team']} @ {game['Home Team']} - Best Bet: {game['Best Bet']}</summary>
-                                <p>Date: {game['Date'].strftime("%b %d, %I:%M %p")}</p>
-                                <p>Market: {game['Market']}</p>
-                                <p>Home EV ($): {game['Home EV ($)']}</p>
-                                <p>Away EV ($): {game['Away EV ($)']}</p>
-                                <p>Best EV ($): {game['Best EV ($)']}</p>
-                            </details>
+                        <div class="fade-in card">
+                            <h4>{game['Away Team']} @ {game['Home Team']}</h4>
+                            <p style="opacity:0.7;">{game['Date'].strftime("%b %d, %I:%M %p")}</p>
+                            <p><span class="glow-badge">Best Bet: {game['Best Bet']}</span></p>
+                            <p style="margin-top:4px;">EV: <strong>${game['Best EV ($)']}</strong></p>
                         </div>
                         """, unsafe_allow_html=True)
                     c_idx = (c_idx + 1) % 3
+
+# ---------------- MODAL ----------------
+if st.session_state["modal_open"] is not None:
+    game = market_df.iloc[st.session_state["modal_open"]]
+    st.markdown(f"""
+    <div class="modal-overlay">
+        <div class="modal-card">
+            <h2>{game['Away Team']} @ {game['Home Team']}</h2>
+            <p>Date: {game['Date'].strftime("%b %d, %I:%M %p")}</p>
+            <p>Market: {game['Market']}</p>
+            <p>Home EV ($): {game['Home EV ($)']}</p>
+            <p>Away EV ($): {game['Away EV ($)']}</p>
+            <p>Best EV ($): {game['Best EV ($)']}</p>
+            <form action="" method="post">
+                <button class="close-btn" name="close_modal">Close</button>
+            </form>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    # Close modal if button pressed
+    if st.button("Close Modal"):
+        st.session_state["modal_open"] = None
