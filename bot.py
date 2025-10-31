@@ -32,21 +32,20 @@ def get_moneyline_ev(ml, bet=100):
     return calculate_ev(prob, payout, bet)
 
 # -------------------------------
-# FETCH DATA
+# FETCH DATA FUNCTION
 # -------------------------------
 @st.cache_data(ttl=3600)
 def fetch_games():
-    url = f"https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey={API_KEY}&regions=us&markets=moneyline"
+    url = f"https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey={API_KEY}&regions=us&markets=moneyline,spreads"
     try:
         response = requests.get(url)
+        if response.status_code == 422:
+            st.warning("No odds available for NFL games at this time.")
+            return pd.DataFrame()
         response.raise_for_status()
         data = response.json()
-
-        if not data:
-            st.warning("⚠️ API returned no games. NFL may be off-season or no games scheduled.")
-            return pd.DataFrame()
-
         results = []
+
         for g in data:
             try:
                 home = g['home_team']
@@ -54,13 +53,23 @@ def fetch_games():
                 dt = datetime.fromisoformat(g['commence_time'].replace("Z", "+00:00"))
                 week = dt.isocalendar()[1]
 
-                outcomes = g['bookmakers'][0]['markets'][0]['outcomes']
-                home_ml = next((o['price'] for o in outcomes if o['name'] == home), None)
-                away_ml = next((o['price'] for o in outcomes if o['name'] == away), None)
+                # Loop through bookmakers to find first available market
+                home_ev = away_ev = None
+                for bookmaker in g.get('bookmakers', []):
+                    for market in bookmaker.get('markets', []):
+                        outcomes = market.get('outcomes', [])
+                        if len(outcomes) >= 2:
+                            # Match names
+                            home_ml = next((o['price'] for o in outcomes if o['name'] == home), None)
+                            away_ml = next((o['price'] for o in outcomes if o['name'] == away), None)
+                            if home_ml is not None and away_ml is not None:
+                                home_ev = get_moneyline_ev(home_ml)
+                                away_ev = get_moneyline_ev(away_ml)
+                                break
+                    if home_ev is not None:
+                        break
 
-                if home_ml and away_ml:
-                    home_ev = get_moneyline_ev(home_ml)
-                    away_ev = get_moneyline_ev(away_ml)
+                if home_ev is not None and away_ev is not None:
                     results.append({
                         "Week": week,
                         "Date": dt.strftime("%b %d, %Y %I:%M %p"),
@@ -74,10 +83,11 @@ def fetch_games():
                 continue
 
         if not results:
-            st.warning("⚠️ No valid game odds available yet.")
+            st.warning("No valid game odds available yet.")
             return pd.DataFrame()
 
         return pd.DataFrame(results).sort_values(by=["Week", "Date"])
+
     except requests.exceptions.HTTPError as e:
         st.error(f"HTTP Error: {e}")
         return pd.DataFrame()
@@ -119,18 +129,17 @@ st.title("🏈 NFL +EV Glassy Dashboard")
 st.markdown("Interactive glassy cards showing Home vs Away EV with mini native bars.")
 
 df = fetch_games()
-if df.empty:
-    st.info("No games to display yet. Check back when NFL games are scheduled or API limits reset.")
-else:
-    # Sidebar filters
-    st.sidebar.header("Filters")
-    week_filter = st.sidebar.multiselect("Select Week", sorted(df["Week"].unique()), default=sorted(df["Week"].unique()))
-    team_filter = st.sidebar.multiselect(
-        "Select Teams",
-        sorted(set(df["Home Team"].unique()) | set(df["Away Team"].unique()))
-    )
-    sort_option = st.sidebar.radio("Sort by", ["Highest EV", "Home EV", "Away EV", "Week", "Date"])
 
+# Sidebar filters
+st.sidebar.header("Filters")
+week_filter = st.sidebar.multiselect("Select Week", sorted(df["Week"].unique()) if not df.empty else [], default=sorted(df["Week"].unique()) if not df.empty else [])
+team_filter = st.sidebar.multiselect(
+    "Select Teams",
+    sorted(set(df["Home Team"].unique()) | set(df["Away Team"].unique())) if not df.empty else []
+)
+sort_option = st.sidebar.radio("Sort by", ["Highest EV", "Home EV", "Away EV", "Week", "Date"])
+
+if not df.empty:
     filtered_df = df[df["Week"].isin(week_filter)]
     if team_filter:
         filtered_df = filtered_df[
@@ -150,7 +159,7 @@ else:
     elif sort_option == "Date":
         filtered_df = filtered_df.sort_values(by="Date")
 
-    # Display glassy cards with native bars
+    # Display glassy cards
     for idx, row in filtered_df.iterrows():
         st.markdown(f"""
         <div class="game-card">
@@ -163,5 +172,7 @@ else:
                  class="ev-bar"></div>
         </div>
         """, unsafe_allow_html=True)
+else:
+    st.info("No games to display yet. Check back when NFL odds are available.")
 
 st.caption("Data provided by [The Odds API](https://the-odds-api.com). Built with ❤️ using Streamlit.")
