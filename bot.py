@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
+import time
 
 # -------------------------------
 # PAGE CONFIG
@@ -34,14 +35,13 @@ def get_moneyline_ev(ml, bet=100):
 # -------------------------------
 # FETCH DATA FUNCTION
 # -------------------------------
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=60)  # Refresh every 60 seconds
 def fetch_games():
     url = f"https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey={API_KEY}&regions=us&markets=moneyline,spreads"
     try:
         response = requests.get(url)
         if response.status_code == 422:
-            st.warning("No odds available for NFL games at this time.")
-            return pd.DataFrame()
+            return pd.DataFrame()  # No odds available
         response.raise_for_status()
         data = response.json()
         results = []
@@ -77,22 +77,24 @@ def fetch_games():
                         "Home EV": home_ev,
                         "Away EV": away_ev
                     })
-            except Exception as e:
+            except:
                 continue
 
-        # If no results, provide placeholder example games
-        if not results:
-            results = [
-                {"Week": 1, "Date": "Sep 10, 2025 01:00 PM", "Home Team": "Patriots", "Away Team": "Jets", "Home EV": 25, "Away EV": -10},
-                {"Week": 1, "Date": "Sep 10, 2025 04:25 PM", "Home Team": "Cowboys", "Away Team": "Giants", "Home EV": -5, "Away EV": 15},
-                {"Week": 1, "Date": "Sep 11, 2025 01:00 PM", "Home Team": "Packers", "Away Team": "Bears", "Home EV": 10, "Away EV": 5},
-            ]
-
-        return pd.DataFrame(results).sort_values(by=["Week", "Date"])
+        return pd.DataFrame(results)
 
     except Exception as e:
         st.error(f"Error fetching odds: {e}")
         return pd.DataFrame()
+
+# -------------------------------
+# PLACEHOLDER GAMES
+# -------------------------------
+def placeholder_games():
+    return pd.DataFrame([
+        {"Week": 1, "Date": "Sep 10, 2025 01:00 PM", "Home Team": "Patriots", "Away Team": "Jets", "Home EV": 25, "Away EV": -10},
+        {"Week": 1, "Date": "Sep 10, 2025 04:25 PM", "Home Team": "Cowboys", "Away Team": "Giants", "Home EV": -5, "Away EV": 15},
+        {"Week": 1, "Date": "Sep 11, 2025 01:00 PM", "Home Team": "Packers", "Away Team": "Bears", "Home EV": 10, "Away EV": 5},
+    ])
 
 # -------------------------------
 # STYLES FOR GLASSY CARDS
@@ -124,51 +126,53 @@ body {background: #0e1117; color: #f0f0f0; font-family: 'Helvetica', sans-serif;
 # -------------------------------
 # MAIN UI
 # -------------------------------
+st.sidebar.header("Filters")
+refresh_button = st.sidebar.button("Refresh Odds Now")
+
+# Fetch real games
 df = fetch_games()
 
+# If no real odds, show placeholders
+if df.empty:
+    st.info("No odds available yet. Showing placeholder games.")
+    df = placeholder_games()
+
 # Sidebar filters
-st.sidebar.header("Filters")
-week_filter = st.sidebar.multiselect("Select Week", sorted(df["Week"].unique()) if not df.empty else [], default=sorted(df["Week"].unique()) if not df.empty else [])
-team_filter = st.sidebar.multiselect(
-    "Select Teams",
-    sorted(set(df["Home Team"].unique()) | set(df["Away Team"].unique())) if not df.empty else []
-)
+week_filter = st.sidebar.multiselect("Select Week", sorted(df["Week"].unique()), default=sorted(df["Week"].unique()))
+team_filter = st.sidebar.multiselect("Select Teams", sorted(set(df["Home Team"].unique()) | set(df["Away Team"].unique())))
 sort_option = st.sidebar.radio("Sort by", ["Highest EV", "Home EV", "Away EV", "Week", "Date"])
 
-if not df.empty:
-    filtered_df = df[df["Week"].isin(week_filter)]
-    if team_filter:
-        filtered_df = filtered_df[
-            filtered_df["Home Team"].isin(team_filter) | filtered_df["Away Team"].isin(team_filter)
-        ]
+filtered_df = df[df["Week"].isin(week_filter)]
+if team_filter:
+    filtered_df = filtered_df[
+        filtered_df["Home Team"].isin(team_filter) | filtered_df["Away Team"].isin(team_filter)
+    ]
 
-    # Sorting
-    if sort_option == "Highest EV":
-        filtered_df["Max EV"] = filtered_df[["Home EV", "Away EV"]].max(axis=1)
-        filtered_df = filtered_df.sort_values(by="Max EV", ascending=False)
-    elif sort_option == "Home EV":
-        filtered_df = filtered_df.sort_values(by="Home EV", ascending=False)
-    elif sort_option == "Away EV":
-        filtered_df = filtered_df.sort_values(by="Away EV", ascending=False)
-    elif sort_option == "Week":
-        filtered_df = filtered_df.sort_values(by="Week")
-    elif sort_option == "Date":
-        filtered_df = filtered_df.sort_values(by="Date")
+# Sorting
+if sort_option == "Highest EV":
+    filtered_df["Max EV"] = filtered_df[["Home EV", "Away EV"]].max(axis=1)
+    filtered_df = filtered_df.sort_values(by="Max EV", ascending=False)
+elif sort_option == "Home EV":
+    filtered_df = filtered_df.sort_values(by="Home EV", ascending=False)
+elif sort_option == "Away EV":
+    filtered_df = filtered_df.sort_values(by="Away EV", ascending=False)
+elif sort_option == "Week":
+    filtered_df = filtered_df.sort_values(by="Week")
+elif sort_option == "Date":
+    filtered_df = filtered_df.sort_values(by="Date")
 
-    # Display glassy cards
-    for idx, row in filtered_df.iterrows():
-        st.markdown(f"""
-        <div class="game-card">
-            <div class="game-date">{row['Date']} | Week {row['Week']}</div>
-            <div class="team">{row['Away Team']} <span class="{'ev-positive' if row['Away EV']>0 else 'ev-negative'}">${row['Away EV']}</span></div>
-            <div style="background: {'#06d6a0' if row['Away EV']>0 else '#ef476f'}; width: {min(abs(row['Away EV']),100)}%;"
-                 class="ev-bar"></div>
-            <div class="team">{row['Home Team']} <span class="{'ev-positive' if row['Home EV']>0 else 'ev-negative'}">${row['Home EV']}</span></div>
-            <div style="background: {'#06d6a0' if row['Home EV']>0 else '#ef476f'}; width: {min(abs(row['Home EV']),100)}%;"
-                 class="ev-bar"></div>
-        </div>
-        """, unsafe_allow_html=True)
-else:
-    st.info("No games to display yet. Check back when NFL odds are available.")
+# Display glassy cards
+for idx, row in filtered_df.iterrows():
+    st.markdown(f"""
+    <div class="game-card">
+        <div class="game-date">{row['Date']} | Week {row['Week']}</div>
+        <div class="team">{row['Away Team']} <span class="{'ev-positive' if row['Away EV']>0 else 'ev-negative'}">${row['Away EV']}</span></div>
+        <div style="background: {'#06d6a0' if row['Away EV']>0 else '#ef476f'}; width: {min(abs(row['Away EV']),100)}%;"
+             class="ev-bar"></div>
+        <div class="team">{row['Home Team']} <span class="{'ev-positive' if row['Home EV']>0 else 'ev-negative'}">${row['Home EV']}</span></div>
+        <div style="background: {'#06d6a0' if row['Home EV']>0 else '#ef476f'}; width: {min(abs(row['Home EV']),100)}%;"
+             class="ev-bar"></div>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.caption("Data provided by [The Odds API](https://the-odds-api.com). Built with ❤️ using Streamlit.")
