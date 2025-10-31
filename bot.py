@@ -10,14 +10,25 @@ DEFAULT_BET = 100
 ODDS_API_KEY = "558d1e3bfadf5243c8292da72801012f"
 
 # Helper functions
+def moneyline_to_prob(ml):
+    if ml > 0:
+        return 100 / (ml + 100)
+    else:
+        return abs(ml) / (abs(ml) + 100)
+
+def calculate_ev(probability, payout, bet_amount):
+    return probability * payout - (1 - probability) * bet_amount
+
+def get_moneyline_ev(odds, bet_amount=DEFAULT_BET):
+    prob = moneyline_to_prob(odds)
+    payout = (moneyline_to_multiplier(odds) - 1) * bet_amount
+    ev = calculate_ev(prob, payout, bet_amount)
+    return ev
+
 def moneyline_to_multiplier(ml):
     return ml / 100 + 1 if ml > 0 else 100 / abs(ml) + 1
 
-def spread_to_ev(point, bet_amount=100):
-    prob = 0.5 + (point / 50)
-    ev = prob * bet_amount - (1 - prob) * bet_amount
-    return round(ev, 2)
-
+# Fetching data functions same as before...
 @st.cache_data(ttl=3600)
 def get_available_markets():
     url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?apiKey={ODDS_API_KEY}&regions={REGION}"
@@ -56,11 +67,11 @@ def get_upcoming_games(markets):
                 if market == "moneyline" and len(outcomes) >= 2:
                     home_ml = outcomes[0]['price']
                     away_ml = outcomes[1]['price']
-                    home_ev = (1/moneyline_to_multiplier(home_ml))*DEFAULT_BET*(moneyline_to_multiplier(home_ml)-1) - (1-(1/moneyline_to_multiplier(home_ml)))*DEFAULT_BET
-                    away_ev = (1/moneyline_to_multiplier(away_ml))*DEFAULT_BET*(moneyline_to_multiplier(away_ml)-1) - (1-(1/moneyline_to_multiplier(away_ml)))*DEFAULT_BET
+                    home_ev = get_moneyline_ev(home_ml, DEFAULT_BET)
+                    away_ev = get_moneyline_ev(away_ml, DEFAULT_BET)
                 else:
-                    home_point = outcomes[0].get('point', 0)
-                    away_point = outcomes[1].get('point', 0)
+                    home_point = outcomes[0].get('point',0)
+                    away_point = outcomes[1].get('point',0)
                     home_ev = spread_to_ev(home_point, DEFAULT_BET)
                     away_ev = spread_to_ev(away_point, DEFAULT_BET)
                 data.append({
@@ -83,24 +94,24 @@ def calculate_best_bet(df, bet_amount):
     df["Best EV ($)"] = df[["Home EV ($)", "Away EV ($)"]].max(axis=1)
     return df
 
-# Streamlit page setup
+# --- Streamlit UI ---
 st.set_page_config(page_title="NFL +EV Bot", layout="wide", page_icon="🏈")
 
-# Inject custom CSS for modern UI
+# Custom CSS for a sleek dark UI
 st.markdown(
     """
     <style>
         body {
-            background-color: #0d0d14;
+            background-color: #121212;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            color: #e5e5e5;
+            color: #e0e0e0;
         }
         h1 {
             text-align: center;
             font-size: 2.5rem;
             margin-top: 20px;
             margin-bottom: 10px;
-            color: #a573ff;
+            color: #00ffff;
         }
         /* Sidebar styles */
         .sidebar .sidebar-content {
@@ -108,12 +119,12 @@ st.markdown(
             padding: 20px;
             border-radius: 12px;
         }
-        /* Slider & number input styles */
+        /* Filters and inputs */
         .stSlider, .stNumberInput {
             background-color: #2e2e3e;
             border-radius: 8px;
         }
-        /* Game card styles */
+        /* Card style */
         .game-card {
             background-color: #1f1f2e;
             border-radius: 12px;
@@ -127,10 +138,10 @@ st.markdown(
             transform: translateY(-4px);
             box-shadow: 0 8px 20px rgba(0,0,0,0.4);
         }
-        /* Badge styles */
+        /* Badge style */
         .badge {
-            background-color: #a573ff;
-            color: #fff;
+            background-color: #00ffff;
+            color: #000;
             padding: 4px 12px;
             border-radius: 8px;
             font-size: 0.85rem;
@@ -138,7 +149,7 @@ st.markdown(
             display: inline-block;
             margin-top: 8px;
         }
-        /* Modal styles */
+        /* Modal overlay */
         .modal {
             position: fixed;
             top: 0; left: 0;
@@ -162,9 +173,9 @@ st.markdown(
         .close-btn {
             position: absolute;
             top: 10px; right: 10px;
-            background: #a573ff;
+            background: #00ffff;
             border: none;
-            color: #fff;
+            color: #000;
             padding: 6px 12px;
             border-radius: 6px;
             cursor: pointer;
@@ -175,7 +186,7 @@ st.markdown(
 )
 
 # Title
-st.markdown("<h1>🏈 NFL +EV Bot – Modern Interactive</h1>", unsafe_allow_html=True)
+st.markdown("<h1>🏈 NFL +EV Bot – Modern Dashboard</h1>", unsafe_allow_html=True)
 
 # Sidebar filters
 st.sidebar.header("⚙️ Settings")
@@ -190,15 +201,15 @@ if games_df.empty:
     st.warning("No upcoming games found.")
     st.stop()
 
-# Calculate best bets and filter by EV
+# Calculate best bets & filter
 games_df = calculate_best_bet(games_df, bet_amount)
 games_df = games_df[games_df["Best EV ($)"] >= ev_filter]
 
-# Create tabs for each week
+# Create tabs per week
 weeks = sorted(games_df["Week"].unique())
 week_tabs = st.tabs([f"Week {w}" for w in weeks])
 
-# Loop through each week tab
+# Display for each week
 for i, week in enumerate(weeks):
     with week_tabs[i]:
         week_df = games_df[games_df["Week"] == week]
@@ -209,14 +220,13 @@ for i, week in enumerate(weeks):
                 st.markdown(f"<h2 style='text-align:center;'>Week {week} - {market.title()}</h2>", unsafe_allow_html=True)
                 total_ev = market_df["Best EV ($)"].sum()
                 num_bets = market_df.shape[0]
-                st.markdown(f"<p style='text-align:center; font-weight:600;'>Simulated Bets: {num_bets} | Total Expected Profit: ${total_ev}</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='text-align:center; font-weight:600;'>Bets: {num_bets} | Total EV: ${total_ev}</p>", unsafe_allow_html=True)
 
-                # Display in a grid of 3 columns
+                # Display cards in 3 columns
                 cols = st.columns(3)
                 for idx, (_, game) in enumerate(market_df.iterrows()):
                     col = cols[idx % 3]
                     with col:
-                        # Render game card
                         st.markdown(
                             f"""
                             <div class="game-card" onclick="document.querySelector('[data-key={idx}] button').click();">
@@ -228,11 +238,10 @@ for i, week in enumerate(weeks):
                             """,
                             unsafe_allow_html=True
                         )
-                        # Invisible button to trigger modal
                         if st.button("", key=f"btn_{idx}_{week}_{market}"):
                             st.session_state["modal_open"] = idx
 
-# Modal display for selected game
+# Show modal when a game is clicked
 if st.session_state.get("modal_open") is not None:
     idx = st.session_state["modal_open"]
     game = games_df.iloc[idx]
