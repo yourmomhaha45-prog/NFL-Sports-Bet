@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone
 import requests
-import os
 import time
 
 st.set_page_config(page_title="Live Arbitrage Dashboard", layout="wide")
@@ -21,10 +20,8 @@ refresh_interval = st.sidebar.slider("Auto-refresh interval (seconds)", 5, 60, 1
 # ------------------------
 # Odds API setup
 # ------------------------
-THEODDS_KEY = os.environ.get("THEODDS_API_KEY")
-if not THEODDS_KEY:
-    st.error("Please set THEODDS_API_KEY in environment variables or Streamlit secrets.")
-    st.stop()
+# Using Streamlit secrets for the API key
+THEODDS_KEY = st.secrets["THEODDS_API_KEY"]
 
 sport_map = {
     "NFL": "americanfootball_nfl",
