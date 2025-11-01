@@ -1,19 +1,42 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
+import time
+
+st.set_page_config(page_title="Sports Arbitrage Dashboard", layout="wide")
+
+st.title("🏀🏈 Sports Arbitrage Dashboard")
 
 # --- Demo odds data ---
-ODDS_STORE = {
-    "ManU-Liv 1x2": {
-        "BookA": {"home": 2.10, "draw": 3.40, "away": 3.60},
-        "BookB": {"home": 2.20, "draw": 3.10, "away": 3.40},
-        "BookC": {"home": 2.05, "draw": 3.50, "away": 3.80},
+ODDS_STORE = [
+    {
+        "sport": "NFL",
+        "date": "2025-11-05 13:00",
+        "match": "Patriots vs Jets",
+        "odds": {
+            "BookA": {"home": 1.95, "away": 1.95},
+            "BookB": {"home": 2.00, "away": 1.90},
+        }
     },
-    "Nadal-Federer moneyline": {
-        "BookX": {"playerA": 1.95, "playerB": 2.05},
-        "BookY": {"playerA": 2.00, "playerB": 2.00},
-        "BookZ": {"playerA": 1.92, "playerB": 2.10},
+    {
+        "sport": "NBA",
+        "date": "2025-11-06 19:30",
+        "match": "Lakers vs Celtics",
+        "odds": {
+            "BookA": {"home": 1.85, "away": 2.05},
+            "BookB": {"home": 1.90, "away": 2.00},
+        }
+    },
+    {
+        "sport": "NFL",
+        "date": "2025-11-07 16:25",
+        "match": "Cowboys vs Eagles",
+        "odds": {
+            "BookA": {"home": 2.10, "away": 1.80},
+            "BookB": {"home": 2.05, "away": 1.85},
+        }
     }
-}
+]
 
 # --- Arbitrage detection ---
 def detect_arbs(market_odds):
@@ -42,29 +65,52 @@ def compute_stakes(best_odds, budget):
     profit_pct = round((profit/budget)*100,4)
     return stakes, payout, profit, profit_pct
 
-# --- Streamlit UI ---
-st.set_page_config(page_title="Arbitrage Bot Demo")
-st.title("Arbitrage Bot Demo")
+# --- Sidebar ---
+budget = st.sidebar.number_input("Budget ($)", value=100, step=10)
+st.sidebar.markdown("### Filter by sport")
+sports = list(set([x["sport"] for x in ODDS_STORE]))
+selected_sports = st.sidebar.multiselect("Sports", sports, default=sports)
+refresh_rate = st.sidebar.slider("Auto-refresh interval (seconds)", 5, 60, 10)
 
-budget = st.number_input("Budget ($)", value=100.0, step=10.0)
+# --- Main dashboard ---
+def render_dashboard():
+    arbs_list = []
 
-arbs_list = []
-for market_name, market_odds in ODDS_STORE.items():
-    arb = detect_arbs(market_odds)
-    if arb:
-        stakes, payout, profit, profit_pct = compute_stakes(arb["best"], budget)
-        arbs_list.append({
-            "Market": market_name,
-            "Profit %": round(arb["profit_pct"],3),
-            "S": round(arb["S"],6),
-            "Payout": payout,
-            "Profit $": profit,
-            "Stakes": stakes
-        })
+    for game in [g for g in ODDS_STORE if g["sport"] in selected_sports]:
+        arb = detect_arbs(game["odds"])
+        if arb:
+            stakes, payout, profit, profit_pct = compute_stakes(arb["best"], budget)
+            arbs_list.append({
+                "sport": game["sport"],
+                "date": datetime.strptime(game["date"], "%Y-%m-%d %H:%M"),
+                "match": game["match"],
+                "arb": arb,
+                "stakes": stakes,
+                "profit_pct": profit_pct,
+                "profit": profit
+            })
 
-if arbs_list:
-    df = pd.DataFrame(arbs_list)
-    df = df.sort_values("Profit %", ascending=False)
-    st.dataframe(df)
-else:
-    st.info("No arbitrage opportunities found (demo data).")
+    # Sort by highest profit %
+    arbs_list.sort(key=lambda x: x["profit_pct"], reverse=True)
+
+    for a in arbs_list:
+        st.markdown(f"### {a['sport']} — {a['match']}")
+        st.markdown(f"**Date:** {a['date'].strftime('%b %d %Y, %H:%M')}")
+        cols = st.columns(len(a['arb']['best']))
+        for idx, (outcome, (book, odd)) in enumerate(a['arb']['best'].items()):
+            with cols[idx]:
+                st.markdown(f"**{outcome.capitalize()}**")
+                st.markdown(f"Book: {book}")
+                st.markdown(f"Odds: {odd}")
+                st.markdown(f"Stake: ${a['stakes'][outcome]}")
+        st.markdown(f"**Profit %:** {a['profit_pct']:.2f}% — **Profit $:** {a['profit']}")
+        st.markdown("---")
+    if not arbs_list:
+        st.info("No arbitrage opportunities found.")
+
+# --- Auto-refresh ---
+placeholder = st.empty()
+while True:
+    with placeholder.container():
+        render_dashboard()
+    time.sleep(refresh_rate)
