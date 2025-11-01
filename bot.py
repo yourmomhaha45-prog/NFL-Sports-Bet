@@ -1,44 +1,110 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
+import requests
+import os
 import time
 
-st.set_page_config(page_title="Sports Arbitrage Dashboard", layout="wide")
+st.set_page_config(page_title="Live Arbitrage Dashboard", layout="wide")
+st.markdown("<h1 style='text-align: center;'>⚡ Live Sports Arbitrage Dashboard</h1>", unsafe_allow_html=True)
 
-st.title("🏀🏈 Sports Arbitrage Dashboard")
+# ------------------------
+# Sidebar
+# ------------------------
+budget = st.sidebar.number_input("Budget ($)", value=100, step=10)
+selected_sports = st.sidebar.multiselect(
+    "Filter by sport", ["NFL", "NBA", "MLB", "Soccer"], default=["NFL", "NBA"]
+)
+top_n = st.sidebar.slider("Show top N arbitrage opportunities", 1, 20, 5)
+refresh_interval = st.sidebar.slider("Auto-refresh interval (seconds)", 5, 60, 15)
 
-# --- Demo odds data ---
-ODDS_STORE = [
-    {
-        "sport": "NFL",
-        "date": "2025-11-05 13:00",
-        "match": "Patriots vs Jets",
-        "odds": {
-            "BookA": {"home": 1.95, "away": 1.95},
-            "BookB": {"home": 2.00, "away": 1.90},
-        }
-    },
-    {
-        "sport": "NBA",
-        "date": "2025-11-06 19:30",
-        "match": "Lakers vs Celtics",
-        "odds": {
-            "BookA": {"home": 1.85, "away": 2.05},
-            "BookB": {"home": 1.90, "away": 2.00},
-        }
-    },
-    {
-        "sport": "NFL",
-        "date": "2025-11-07 16:25",
-        "match": "Cowboys vs Eagles",
-        "odds": {
-            "BookA": {"home": 2.10, "away": 1.80},
-            "BookB": {"home": 2.05, "away": 1.85},
-        }
-    }
-]
+# ------------------------
+# Odds API setup
+# ------------------------
+THEODDS_KEY = os.environ.get("THEODDS_API_KEY")
+if not THEODDS_KEY:
+    st.error("Please set THEODDS_API_KEY in environment variables or Streamlit secrets.")
+    st.stop()
 
-# --- Arbitrage detection ---
+sport_map = {
+    "NFL": "americanfootball_nfl",
+    "NBA": "basketball_nba",
+    "MLB": "baseball_mlb",
+    "Soccer": "soccer_epl"
+}
+
+sport_icons = {
+    "NFL": "🏈",
+    "NBA": "🏀",
+    "MLB": "⚾",
+    "Soccer": "⚽"
+}
+
+# ------------------------
+# Functions
+# ------------------------
+def fetch_live_odds_theoddsapi(sports_to_fetch, regions="us", markets="h2h", odds_format="decimal"):
+    base = "https://api.the-odds-api.com/v4/sports"
+    results = []
+    headers = {"Accept": "application/json"}
+
+    for sport_key in sports_to_fetch:
+        url = f"{base}/{sport_key}/odds"
+        params = {
+            "regions": regions,
+            "markets": markets,
+            "oddsFormat": odds_format,
+            "dateFormat": "iso",
+            "apiKey": THEODDS_KEY
+        }
+        try:
+            r = requests.get(url, params=params, timeout=10, headers=headers)
+            if r.status_code == 429:
+                time.sleep(1.5)
+                r = requests.get(url, params=params, timeout=10, headers=headers)
+            r.raise_for_status()
+        except requests.RequestException as e:
+            st.warning(f"Odds fetch failed for {sport_key}: {e}")
+            continue
+
+        data = r.json()
+        for ev in data:
+            commence = ev.get("commence_time")
+            try:
+                date = datetime.fromisoformat(commence.replace("Z", "+00:00")).astimezone(timezone.utc)
+            except Exception:
+                date = datetime.utcnow()
+
+            normalized = {}
+            for book in ev.get("bookmakers", []):
+                book_name = book.get("title") or book.get("key")
+                book_odds = {}
+                for m in book.get("markets", []):
+                    if m.get("key") == "h2h":
+                        for o in m.get("outcomes", []):
+                            name = o.get("name")
+                            price = o.get("price")
+                            if name == ev.get("home_team"):
+                                book_odds["home"] = price
+                            elif name == ev.get("away_team"):
+                                book_odds["away"] = price
+                            else:
+                                book_odds[name] = price
+                if book_odds:
+                    normalized[book_name] = book_odds
+
+            if normalized:
+                match_label = f"{ev.get('home_team')} vs {ev.get('away_team')}"
+                results.append({
+                    "sport": sport_key,
+                    "date": date,
+                    "match": match_label,
+                    "odds": normalized,
+                    "raw": ev
+                })
+        time.sleep(0.3)
+    return results
+
 def detect_arbs(market_odds):
     outcomes = set()
     for outmap in market_odds.values():
@@ -65,24 +131,18 @@ def compute_stakes(best_odds, budget):
     profit_pct = round((profit/budget)*100,4)
     return stakes, payout, profit, profit_pct
 
-# --- Sidebar ---
-budget = st.sidebar.number_input("Budget ($)", value=100, step=10)
-st.sidebar.markdown("### Filter by sport")
-sports = list(set([x["sport"] for x in ODDS_STORE]))
-selected_sports = st.sidebar.multiselect("Sports", sports, default=sports)
-refresh_rate = st.sidebar.slider("Auto-refresh interval (seconds)", 5, 60, 10)
-
-# --- Main dashboard ---
 def render_dashboard():
+    sports_to_fetch = [sport_map[s] for s in selected_sports if s in sport_map]
+    live_odds = fetch_live_odds_theoddsapi(sports_to_fetch)
     arbs_list = []
 
-    for game in [g for g in ODDS_STORE if g["sport"] in selected_sports]:
+    for game in live_odds:
         arb = detect_arbs(game["odds"])
         if arb:
             stakes, payout, profit, profit_pct = compute_stakes(arb["best"], budget)
             arbs_list.append({
                 "sport": game["sport"],
-                "date": datetime.strptime(game["date"], "%Y-%m-%d %H:%M"),
+                "date": game["date"],
                 "match": game["match"],
                 "arb": arb,
                 "stakes": stakes,
@@ -90,27 +150,50 @@ def render_dashboard():
                 "profit": profit
             })
 
-    # Sort by highest profit %
     arbs_list.sort(key=lambda x: x["profit_pct"], reverse=True)
+    top_arbs = arbs_list[:top_n]
 
-    for a in arbs_list:
-        st.markdown(f"### {a['sport']} — {a['match']}")
+    if not top_arbs:
+        st.info("No arbitrage opportunities found at the moment.")
+        return
+
+    for idx, a in enumerate(top_arbs):
+        icon = sport_icons.get(a['sport'], "")
+        highlight = "3px solid gold" if idx < 5 else "1px solid lightgray"
+        color_intensity = min(255, int(a['profit_pct']*25))
+        card_style = f"""
+            background-color: rgba(0,{color_intensity},0,0.1);
+            padding: 14px; border-radius: 14px; 
+            margin-bottom: 12px;
+            border: {highlight};
+            transition: transform 0.2s;
+        """
+        st.markdown(f"<div style='{card_style}'>", unsafe_allow_html=True)
+        st.markdown(f"### {icon} {a['sport']} — {a['match']}")
         st.markdown(f"**Date:** {a['date'].strftime('%b %d %Y, %H:%M')}")
+
         cols = st.columns(len(a['arb']['best']))
-        for idx, (outcome, (book, odd)) in enumerate(a['arb']['best'].items()):
-            with cols[idx]:
+        for col_idx, (outcome, (book, odd)) in enumerate(a['arb']['best'].items()):
+            with cols[col_idx]:
+                hover_style = """
+                    <style>
+                    div:hover { transform: scale(1.05); }
+                    </style>
+                """
+                st.markdown(hover_style, unsafe_allow_html=True)
                 st.markdown(f"**{outcome.capitalize()}**")
                 st.markdown(f"Book: {book}")
                 st.markdown(f"Odds: {odd}")
                 st.markdown(f"Stake: ${a['stakes'][outcome]}")
-        st.markdown(f"**Profit %:** {a['profit_pct']:.2f}% — **Profit $:** {a['profit']}")
-        st.markdown("---")
-    if not arbs_list:
-        st.info("No arbitrage opportunities found.")
 
-# --- Auto-refresh ---
+        st.markdown(f"<span style='background-color: rgba(0,{color_intensity},0,0.2); padding:4px 8px; border-radius:8px;'>Profit %: {a['profit_pct']:.2f}% — Profit $: {a['profit']}</span>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# ------------------------
+# Auto-refresh loop
+# ------------------------
 placeholder = st.empty()
 while True:
     with placeholder.container():
         render_dashboard()
-    time.sleep(refresh_rate)
+    time.sleep(refresh_interval)
