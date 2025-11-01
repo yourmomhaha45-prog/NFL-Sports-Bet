@@ -20,8 +20,7 @@ refresh_interval = st.sidebar.slider("Auto-refresh interval (seconds)", 5, 60, 1
 # ------------------------
 # Odds API setup
 # ------------------------
-# DIRECTLY USE THE API KEY YOU PROVIDED
-THEODDS_KEY = "2aa294bcbd091e366f4249805fcf401e"
+THEODDS_KEY = "2aa294bcbd091e366f4249805fcf401e"  # directly use your API key
 
 sport_map = {
     "NFL": "americanfootball_nfl",
@@ -43,7 +42,6 @@ sport_icons = {
 def fetch_live_odds_theoddsapi(sports_to_fetch, regions="us", markets="h2h", odds_format="decimal"):
     base = "https://api.the-odds-api.com/v4/sports"
     results = []
-    headers = {"Accept": "application/json"}
 
     for sport_key in sports_to_fetch:
         url = f"{base}/{sport_key}/odds"
@@ -55,10 +53,10 @@ def fetch_live_odds_theoddsapi(sports_to_fetch, regions="us", markets="h2h", odd
             "apiKey": THEODDS_KEY
         }
         try:
-            r = requests.get(url, params=params, timeout=10, headers=headers)
+            r = requests.get(url, params=params, timeout=10)
             if r.status_code == 429:
                 time.sleep(1.5)
-                r = requests.get(url, params=params, timeout=10, headers=headers)
+                r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
         except requests.RequestException as e:
             st.warning(f"Odds fetch failed for {sport_key}: {e}")
@@ -128,11 +126,15 @@ def compute_stakes(best_odds, budget):
     profit_pct = round((profit/budget)*100,4)
     return stakes, payout, profit, profit_pct
 
+# ------------------------
+# Main Dashboard
+# ------------------------
 def render_dashboard():
     sports_to_fetch = [sport_map[s] for s in selected_sports if s in sport_map]
     live_odds = fetch_live_odds_theoddsapi(sports_to_fetch)
     arbs_list = []
 
+    # Detect real arbitrages
     for game in live_odds:
         arb = detect_arbs(game["odds"])
         if arb:
@@ -147,12 +149,52 @@ def render_dashboard():
                 "profit": profit
             })
 
+    # ------------------------
+    # Dummy arbitrage data for testing UI
+    # ------------------------
+    if not arbs_list:
+        st.info("No live arbitrage opportunities found. Showing dummy data for testing.")
+        dummy_games = [
+            {
+                "sport": "NBA",
+                "date": datetime.utcnow(),
+                "match": "Lakers vs Celtics",
+                "odds": {
+                    "Book1": {"home": 2.2, "away": 1.7},
+                    "Book2": {"home": 1.8, "away": 2.3},
+                    "Book3": {"home": 2.1, "away": 1.75},
+                }
+            },
+            {
+                "sport": "NFL",
+                "date": datetime.utcnow(),
+                "match": "Packers vs Bears",
+                "odds": {
+                    "BookA": {"home": 1.9, "away": 2.1},
+                    "BookB": {"home": 2.05, "away": 1.95},
+                    "BookC": {"home": 2.0, "away": 2.0},
+                }
+            }
+        ]
+        for game in dummy_games:
+            arb = detect_arbs(game["odds"])
+            if arb:
+                stakes, payout, profit, profit_pct = compute_stakes(arb["best"], budget)
+                arbs_list.append({
+                    "sport": game["sport"],
+                    "date": game["date"],
+                    "match": game["match"],
+                    "arb": arb,
+                    "stakes": stakes,
+                    "profit_pct": profit_pct,
+                    "profit": profit
+                })
+
+    # ------------------------
+    # Sort and display
+    # ------------------------
     arbs_list.sort(key=lambda x: x["profit_pct"], reverse=True)
     top_arbs = arbs_list[:top_n]
-
-    if not top_arbs:
-        st.info("No arbitrage opportunities found at the moment.")
-        return
 
     for idx, a in enumerate(top_arbs):
         icon = sport_icons.get(a['sport'], "")
