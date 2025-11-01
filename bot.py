@@ -20,8 +20,8 @@ refresh_interval = st.sidebar.slider("Auto-refresh interval (seconds)", 5, 60, 1
 # ------------------------
 # Odds API setup
 # ------------------------
-# Using Streamlit secrets for the API key
-THEODDS_KEY = st.secrets["THEODDS_API_KEY"]
+# DIRECTLY USE THE API KEY YOU PROVIDED
+THEODDS_KEY = "2aa294bcbd091e366f4249805fcf401e"
 
 sport_map = {
     "NFL": "americanfootball_nfl",
